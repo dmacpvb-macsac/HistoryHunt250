@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { resolveGameFromQr } from '@/lib/gameLoader'
 import { supabase } from '@/lib/supabase'
 
+const SONG_URL = 'https://america250proof.com/go/'
+
 export default function PlayPage({
   params,
 }: {
@@ -131,7 +133,7 @@ export default function PlayPage({
 
   async function nextQuestion() {
     if (current === questions.length - 1) {
-      const finalScore = score + (correct ? 0 : 0)
+      const finalScore = score
 
       if (sessionId) {
         await supabase
@@ -153,6 +155,13 @@ export default function PlayPage({
   }
 
   if (finished) {
+    const isPerfect = score === hunt.game.total_points
+    const participantBadge =
+      hunt.game.participant_badge_url || '/badges/jax-participant.png'
+    const perfectBadge =
+      hunt.game.perfect_score_badge_url || '/badges/jax-perfect-score.png'
+    const badgeUrl = isPerfect ? perfectBadge : participantBadge
+
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
         <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
@@ -178,18 +187,52 @@ export default function PlayPage({
             Final Score
           </p>
 
-          {score === hunt.game.total_points && (
-            <div className="mt-6 bg-yellow-100 border border-yellow-300 rounded-xl p-4">
-              🏆 Perfect Score Badge Unlocked
-            </div>
-          )}
+          <div className="mt-6">
+            <img
+              src={badgeUrl}
+              alt={isPerfect ? 'Perfect Score Badge' : 'Participant Badge'}
+              className="w-72 mx-auto"
+            />
+          </div>
 
           <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-            🎖 Florida History Hunt Completion Badge
+            {isPerfect ? (
+              <>
+                <p className="text-xl font-bold text-blue-900">
+                  🏆 Perfect Score!
+                </p>
+                <p className="mt-2 text-gray-700">
+                  Congratulations — you earned the Freedom Fest 250 Perfect Score Badge.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-blue-900">
+                  🎖 Badge Earned!
+                </p>
+                <p className="mt-2 text-gray-700">
+                  Congratulations — you completed the Freedom Fest 250 History Hunt.
+                </p>
+              </>
+            )}
           </div>
 
           <a
-            href="https://www.youtube.com/watch?v=drnBrAmbNHE"
+            href={badgeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="block mt-6 bg-yellow-500 text-blue-950 rounded-xl p-4 text-xl font-bold"
+          >
+            💾 Save My Badge
+          </a>
+
+          <p className="mt-3 text-sm text-gray-500">
+            Share your badge on Facebook, Instagram, X, LinkedIn, or your favorite social platform.
+          </p>
+
+          <a
+            href={SONG_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="block mt-6 bg-red-600 text-white rounded-xl p-4 text-xl font-bold"
@@ -246,7 +289,7 @@ export default function PlayPage({
             <p className="font-bold">🎵 Bonus Challenge</p>
             <p className="text-sm mt-1">{q.youtube_prompt}</p>
             <a
-              href="https://www.youtube.com/watch?v=drnBrAmbNHE"
+              href={SONG_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block mt-3 bg-red-600 text-white px-4 py-2 rounded-lg font-bold"
