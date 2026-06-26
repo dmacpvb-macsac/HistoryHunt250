@@ -36,7 +36,7 @@ function RegisterForm() {
 
   const handleSubmit = async () => {
     if (!form.first_name.trim()) {
-      setError('Please enter your name.')
+      setError('Please enter your first name.')
       return
     }
     const digits = stripPhone(form.phone_number)
@@ -94,21 +94,18 @@ function RegisterForm() {
           </div>
         )}
 
-        {/* Name */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Name <span className="text-red-500">*</span>
+            First Name <span className="text-red-500">*</span>
           </label>
           <input
             className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Your name"
-            autoComplete="name"
+            placeholder="Your first name"
             value={form.first_name}
             onChange={e => setForm({ ...form, first_name: e.target.value })}
           />
         </div>
 
-        {/* Phone */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Mobile Number <span className="text-red-500">*</span>
@@ -118,7 +115,6 @@ function RegisterForm() {
             placeholder="(555) 555-5555"
             type="tel"
             inputMode="numeric"
-            autoComplete="tel"
             value={form.phone_number}
             onChange={handlePhoneChange}
           />
@@ -132,7 +128,6 @@ function RegisterForm() {
           )}
         </div>
 
-        {/* Email */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Email <span className="text-gray-400 text-xs">(optional)</span>
@@ -141,13 +136,11 @@ function RegisterForm() {
             className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="your@email.com"
             type="email"
-            autoComplete="email"
             value={form.email}
             onChange={e => setForm({ ...form, email: e.target.value })}
           />
         </div>
 
-        {/* Checkboxes */}
         <div className="space-y-3 mb-6">
 
           <label className="flex items-start gap-3 cursor-pointer">
@@ -210,7 +203,6 @@ function RegisterForm() {
 
         </div>
 
-        {/* Submit */}
         <button
           onClick={handleSubmit}
           disabled={loading || !form.terms_accepted || !form.privacy_accepted}
