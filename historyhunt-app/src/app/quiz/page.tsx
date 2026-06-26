@@ -61,7 +61,7 @@ const questions = [
   },
   {
     question:
-      "What transportation marvel connected mainland Florida to Key West?",
+      "What transportation marvel connected mainland Florida to  Key West?",
     choices: ["Florida Turnpike", "Overseas Railroad", "Cross Florida Canal", "Dixie Highway"],
     answer: "Overseas Railroad",
     fact:

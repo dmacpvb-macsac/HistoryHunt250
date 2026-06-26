@@ -236,7 +236,7 @@ function RegisterForm() {
           </a>
           . No purchase necessary. See{' '}
           <a href="/legal/contest-rules" target="_blank" className="underline">
-            Contest Rules
+            Contest Rules 
           </a>
           .
         </p>
