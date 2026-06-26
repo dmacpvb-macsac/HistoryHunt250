@@ -53,7 +53,15 @@ export default function PlayPage({
           .single()
 
         if (sessionError) {
-          throw new Error(sessionError.message)
+  // Player stored in browser no longer exists (DB reset or cleanup)
+  if (sessionError.message.includes("sessions_player_id_fkey")) {
+    localStorage.clear()
+    router.push(`/register?play=${qrSlug}`)
+    return
+  }
+
+  throw new Error(sessionError.message)
+}
         }
 
         setSessionId(session.session_id)
