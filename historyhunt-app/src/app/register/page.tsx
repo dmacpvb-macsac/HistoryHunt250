@@ -94,7 +94,6 @@ function RegisterForm() {
           </div>
         )}
 
-        {/* Name */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Name <span className="text-red-500">*</span>
@@ -108,7 +107,6 @@ function RegisterForm() {
           />
         </div>
 
-        {/* Phone */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Mobile Number <span className="text-red-500">*</span>
@@ -132,7 +130,6 @@ function RegisterForm() {
           )}
         </div>
 
-        {/* Email */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Email <span className="text-gray-400 text-xs">(optional)</span>
@@ -147,7 +144,6 @@ function RegisterForm() {
           />
         </div>
 
-        {/* Checkboxes */}
         <div className="space-y-3 mb-6">
 
           <label className="flex items-start gap-3 cursor-pointer">
@@ -176,47 +172,25 @@ function RegisterForm() {
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 w-5 h-5 accent-blue-900"
-              checked={form.terms_accepted}
-              onChange={e => setForm({ ...form, terms_accepted: e.target.checked })}
-            />
-            <span className="text-sm text-gray-600">
-              I agree to the{' '}
-              <a href="/legal/terms" target="_blank" className="text-blue-700 underline">
-                Terms of Use
-              </a>{' '}
-              <span className="text-red-500">*</span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 w-5 h-5 accent-blue-900"
-              checked={form.privacy_accepted}
-              onChange={e => setForm({ ...form, privacy_accepted: e.target.checked })}
-            />
-            <span className="text-sm text-gray-600">
-              I have read and accept the{' '}
-              <a href="/legal/privacy" target="_blank" className="text-blue-700 underline">
-                Privacy Policy
-              </a>{' '}
-              <span className="text-red-500">*</span>
-            </span>
-          </label>
-
         </div>
 
-        {/* Submit */}
+        {/* Consolidated Agree and Play button with embedded legal consent */}
+        <p className="text-xs text-gray-500 mb-3 text-center">
+          By tapping below you agree to our{' '}
+          <a href="/legal/terms" target="_blank" className="text-blue-700 underline">Terms of Use</a>
+          {' '}and{' '}
+          <a href="/legal/privacy" target="_blank" className="text-blue-700 underline">Privacy Policy</a>.
+        </p>
+
         <button
-          onClick={handleSubmit}
-          disabled={loading || !form.terms_accepted || !form.privacy_accepted}
+          onClick={() => {
+            setForm(f => ({ ...f, terms_accepted: true, privacy_accepted: true }))
+            setTimeout(handleSubmit, 0)
+          }}
+          disabled={loading}
           className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-xl font-bold transition-colors"
         >
-          {loading ? 'Starting...' : 'Start the Hunt →'}
+          {loading ? 'Starting...' : 'Agree and Play →'}
         </button>
 
         <p className="text-center text-xs text-gray-400 mt-4">
