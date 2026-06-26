@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
 export async function resolveGameFromQr(qrSlug: string) {
-  const { data: venue, error: venueError } = await supabase
+  const { data: venueRaw, error: venueError } = await supabase
     .from("venues")
     .select(`
       venue_id,
@@ -26,8 +26,16 @@ export async function resolveGameFromQr(qrSlug: string) {
     .eq("active", true)
     .single();
 
-  if (venueError || !venue) {
+  if (venueError || !venueRaw) {
     throw new Error(`No active venue found for QR slug: ${qrSlug}`);
+  }
+
+  const campaign = Array.isArray(venueRaw.campaigns)
+    ? venueRaw.campaigns[0]
+    : venueRaw.campaigns;
+
+  if (!campaign) {
+    throw new Error(`No campaign found for QR slug: ${qrSlug}`);
   }
 
   const { data: game, error: gameError } = await supabase
@@ -43,7 +51,7 @@ export async function resolveGameFromQr(qrSlug: string) {
       total_points,
       active
     `)
-    .eq("campaign_id", venue.campaign_id)
+    .eq("campaign_id", venueRaw.campaign_id)
     .eq("active", true)
     .single();
 
@@ -81,11 +89,18 @@ export async function resolveGameFromQr(qrSlug: string) {
     throw new Error(`Questions not found for game: ${game.slug}`);
   }
 
+  const { campaigns, ...venue } = venueRaw;
+
   return {
     qrSlug,
     venue,
-    campaign: venue.campaigns,
+    campaign,
     game,
     questions,
+    permissions: {
+      registrationRequired: true,
+      quizEnabled: venue.quiz_enabled,
+      rewardsEnabled: venue.reward_enabled,
+    },
   };
 }

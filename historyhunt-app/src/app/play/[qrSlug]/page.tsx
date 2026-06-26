@@ -1,7 +1,9 @@
 'use client'
 
 import { use, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { resolveGameFromQr } from '@/lib/gameLoader'
+import { supabase } from '@/lib/supabase'
 
 export default function PlayPage({
   params,
@@ -9,25 +11,59 @@ export default function PlayPage({
   params: Promise<{ qrSlug: string }>
 }) {
   const { qrSlug } = use(params)
+  const router = useRouter()
 
+  const [hunt, setHunt] = useState<any>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [current, setCurrent] = useState(0)
+  const [selected, setSelected] = useState('')
+  const [score, setScore] = useState(0)
+  const [finished, setFinished] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [info, setInfo] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    async function load() {
+    async function start() {
       try {
+        const playerId = localStorage.getItem('player_id')
+
+        if (!playerId) {
+          router.push(`/register?play=${qrSlug}`)
+          return
+        }
+
         const data = await resolveGameFromQr(qrSlug)
-        setInfo(data)
+        setHunt(data)
+
+        const { data: session, error: sessionError } = await supabase
+          .from('sessions')
+          .insert([{
+            player_id: playerId,
+            campaign_id: data.campaign.campaign_id,
+            venue_id: data.venue.venue_id,
+            game_id: data.game.game_id,
+            score: 0,
+            total_points: data.game.total_points,
+            completed: false,
+          }])
+          .select()
+          .single()
+
+        if (sessionError) {
+          throw new Error(sessionError.message)
+        }
+
+        setSessionId(session.session_id)
       } catch (err: any) {
-        setError(err.message || 'Unable to load game.')
+        setError(err.message || 'Unable to load History Hunt.')
       } finally {
         setLoading(false)
       }
     }
 
-    load()
-  }, [qrSlug])
+    start()
+  }, [qrSlug, router])
 
   if (loading) {
     return <main className="p-8">Loading History Hunt...</main>
@@ -35,22 +71,252 @@ export default function PlayPage({
 
   if (error) {
     return (
-      <main className="p-8">
-        <h1 className="text-2xl font-bold text-red-600">{error}</h1>
+      <main className="min-h-screen bg-slate-100 p-6">
+        <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
+          <h1 className="text-2xl font-bold text-red-600">Error</h1>
+          <p className="mt-4">{error}</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (!hunt) return null
+
+  const questions = hunt.questions
+  const q = questions[current]
+
+  const choices = [
+    { key: 'A', text: q.choice_a },
+    { key: 'B', text: q.choice_b },
+    { key: 'C', text: q.choice_c },
+    { key: 'D', text: q.choice_d },
+  ]
+
+  const answered = selected !== ''
+  const correct = selected === q.correct_answer
+
+  async function choose(choiceKey: string) {
+    if (answered || saving || !sessionId) return
+
+    setSaving(true)
+    setSelected(choiceKey)
+
+    const isCorrect = choiceKey === q.correct_answer
+    const pointsAwarded = isCorrect ? q.points : 0
+
+    if (isCorrect) {
+      setScore(prev => prev + pointsAwarded)
+    }
+
+    const playerId = localStorage.getItem('player_id')
+
+    const { error: responseError } = await supabase
+      .from('responses')
+      .insert([{
+        session_id: sessionId,
+        player_id: playerId,
+        game_id: hunt.game.game_id,
+        question_id: q.question_id,
+        selected_answer: choiceKey,
+        correct: isCorrect,
+        points_awarded: pointsAwarded,
+      }])
+
+    if (responseError) {
+      setError(responseError.message)
+    }
+
+    setSaving(false)
+  }
+
+  async function nextQuestion() {
+    if (current === questions.length - 1) {
+      const finalScore = score + (correct ? 0 : 0)
+
+      if (sessionId) {
+        await supabase
+          .from('sessions')
+          .update({
+            score: finalScore,
+            completed: true,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('session_id', sessionId)
+      }
+
+      setFinished(true)
+      return
+    }
+
+    setCurrent(prev => prev + 1)
+    setSelected('')
+  }
+
+  if (finished) {
+    return (
+      <main className="min-h-screen bg-slate-100 p-6 text-center">
+        <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
+          <img
+            src="/history-hunt-logo.png"
+            alt="History Hunt"
+            className="w-44 mx-auto mb-4"
+          />
+
+          <h1 className="text-3xl font-bold text-blue-900">
+            Hunt Complete!
+          </h1>
+
+          <p className="text-gray-600 mt-2">
+            {hunt.campaign.title}
+          </p>
+
+          <p className="text-4xl font-bold mt-6 text-blue-900">
+            {score} / {hunt.game.total_points}
+          </p>
+
+          <p className="mt-2 text-gray-600">
+            Final Score
+          </p>
+
+          {score === hunt.game.total_points && (
+            <div className="mt-6 bg-yellow-100 border border-yellow-300 rounded-xl p-4">
+              🏆 Perfect Score Badge Unlocked
+            </div>
+          )}
+
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            🎖 Florida History Hunt Completion Badge
+          </div>
+
+          <a
+            href="https://www.youtube.com/watch?v=drnBrAmbNHE"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block mt-6 bg-red-600 text-white rounded-xl p-4 text-xl font-bold"
+          >
+            🎵 Listen to America 250 Proof™
+          </a>
+
+          <a
+            href="https://america250proof.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block mt-4 bg-blue-900 text-white rounded-xl p-4 text-xl font-bold"
+          >
+            Visit America250Proof.com
+          </a>
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="p-8">
-      <h1 className="text-3xl font-bold">QR Resolver Working</h1>
+    <main className="min-h-screen bg-slate-100 p-6">
+      <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
+        <img
+          src="/history-hunt-logo.png"
+          alt="History Hunt"
+          className="w-36 mx-auto mb-4"
+        />
 
-      <hr className="my-6" />
+        <p className="text-sm font-bold text-red-600">
+          Question {current + 1} of {questions.length}
+          {q.is_bonus ? ' — Bonus Worth 2 Points' : ''}
+        </p>
 
-      <p><b>QR:</b> {info.qrSlug}</p>
-      <p><b>Venue:</b> {info.venue.name}</p>
-      <p><b>Campaign:</b> {info.campaign.title}</p>
-      <p><b>Game:</b> {info.game.title}</p>
+        <h1 className="text-2xl font-bold text-blue-900 mt-2">
+          {hunt.game.title}
+        </h1>
+
+        <p className="text-gray-500">
+          {hunt.venue.name}
+        </p>
+
+        {q.lyric && (
+          <div className="mt-5 bg-blue-50 border-l-4 border-blue-900 p-4 rounded">
+            <p className="text-sm uppercase font-bold text-blue-900">
+              Lyric Clue
+            </p>
+            <p className="italic">“{q.lyric}”</p>
+          </div>
+        )}
+
+        {q.youtube_prompt && (
+          <div className="mt-5 bg-yellow-100 p-4 rounded-xl">
+            <p className="font-bold">🎵 Bonus Challenge</p>
+            <p className="text-sm mt-1">{q.youtube_prompt}</p>
+            <a
+              href="https://www.youtube.com/watch?v=drnBrAmbNHE"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-3 bg-red-600 text-white px-4 py-2 rounded-lg font-bold"
+            >
+              Listen Now
+            </a>
+          </div>
+        )}
+
+        <h2 className="text-xl font-bold mt-6">
+          {q.question_text}
+        </h2>
+
+        <div className="space-y-3 mt-5">
+          {choices.map(choice => {
+            let cls =
+              'w-full border-2 border-blue-900 rounded-xl p-4 text-left font-semibold'
+
+            if (answered && choice.key === selected && correct) {
+              cls =
+                'w-full border-2 border-green-600 bg-green-100 rounded-xl p-4 text-left font-semibold'
+            } else if (answered && choice.key === selected && !correct) {
+              cls =
+                'w-full border-2 border-red-600 bg-red-100 rounded-xl p-4 text-left font-semibold'
+            } else if (answered && choice.key === q.correct_answer) {
+              cls =
+                'w-full border-2 border-green-600 bg-green-50 rounded-xl p-4 text-left font-semibold'
+            }
+
+            return (
+              <button
+                key={choice.key}
+                onClick={() => choose(choice.key)}
+                disabled={answered || saving}
+                className={cls}
+              >
+                {choice.key}. {choice.text}
+              </button>
+            )
+          })}
+        </div>
+
+        {answered && (
+          <div className="mt-6 bg-slate-50 rounded-xl p-4">
+            <p className="text-xl font-bold">
+              {correct ? '✅ Correct!' : '❌ Not quite.'}
+            </p>
+
+            <p className="mt-3">
+              {q.educational_fact}
+            </p>
+
+            {q.lyric_meaning && (
+              <div className="mt-4 border-t pt-4">
+                <p className="font-bold text-blue-900">
+                  Why this lyric matters
+                </p>
+                <p>{q.lyric_meaning}</p>
+              </div>
+            )}
+
+            <button
+              onClick={nextQuestion}
+              className="mt-5 w-full bg-blue-900 text-white rounded-xl p-4 text-xl font-bold"
+            >
+              {current === questions.length - 1 ? 'See Results' : 'Next Question'}
+            </button>
+          </div>
+        )}
+      </div>
     </main>
   )
 }
