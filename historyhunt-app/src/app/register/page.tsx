@@ -1,65 +1,51 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-function normalizePhoneDigits(value: string): string {
-  let digits = value.replace(/\D/g, '')
-
-  // Handles common U.S. autofill format: +1 (555) 555-5555
-  if (digits.length === 11 && digits.startsWith('1')) {
-    digits = digits.slice(1)
-  }
-
-  return digits.slice(0, 10)
-}
-
 function formatPhone(value: string): string {
-  const digits = normalizePhoneDigits(value)
-
+  const digits = value.replace(/\D/g, '').slice(0, 10)
   if (digits.length <= 3) return digits
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
 function stripPhone(value: string): string {
-  return normalizePhoneDigits(value)
+  return value.replace(/\D/g, '')
 }
 
-export default function Register() {
+function RegisterForm() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const qrSlug = searchParams.get('play') || ''
-
   const [form, setForm] = useState({
     first_name: '',
     phone_number: '',
     email: '',
     sms_opt_in: false,
     service_affiliation: false,
+    terms_accepted: false,
+    privacy_accepted: false,
   })
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const phoneDigits = stripPhone(form.phone_number)
-  const countryCode = '+1'
-  const countryIso = 'US'
-  const phoneE164 = phoneDigits.length === 10 ? `${countryCode}${phoneDigits}` : null
-
-  const canStart =
-    form.first_name.trim().length > 0 &&
-    phoneDigits.length === 10 &&
-    !loading
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, phone_number: formatPhone(e.target.value) })
   }
 
   const handleSubmit = async () => {
-    if (!canStart) {
-      setError('Please enter your first name and a valid 10-digit mobile number.')
+    if (!form.first_name.trim()) {
+      setError('Please enter your first name.')
+      return
+    }
+    const digits = stripPhone(form.phone_number)
+    if (digits.length !== 10) {
+      setError('Please enter a valid 10-digit US phone number.')
+      return
+    }
+    if (!form.terms_accepted || !form.privacy_accepted) {
+      setError('Please accept the Terms of Use and Privacy Policy to continue.')
       return
     }
 
@@ -70,15 +56,12 @@ export default function Register() {
       .from('players')
       .insert([{
         first_name: form.first_name.trim(),
-        phone_number: phoneDigits,
-        country_code: countryCode,
-        country_iso: countryIso,
-        phone_e164: phoneE164,
+        phone_number: digits,
         email: form.email.trim() || null,
         sms_opt_in: form.sms_opt_in,
         service_affiliation: form.service_affiliation,
-        terms_accepted: true,
-        privacy_accepted: true,
+        terms_accepted: form.terms_accepted,
+        privacy_accepted: form.privacy_accepted,
         source: 'qr',
       }])
       .select()
@@ -92,32 +75,17 @@ export default function Register() {
 
     localStorage.setItem('player_id', data.player_id)
     localStorage.setItem('player_name', data.first_name)
-    localStorage.setItem('qr_slug', qrSlug)
-
-    router.push(qrSlug ? `/play/${qrSlug}` : '/')
+    router.push('/play/jacksonville-waterfront')
   }
 
   return (
     <main className="min-h-screen bg-blue-900 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-xl">
+
         <div className="text-center mb-6">
-          <img
-            src="/history-hunt-logo.png"
-            alt="History Hunt"
-            className="w-40 mx-auto mb-4"
-          />
-
-          <h1 className="text-2xl font-bold text-blue-900">
-            History Hunt™
-          </h1>
-
-          <p className="text-gray-500 text-sm mt-1">
-            Presented by America 250 Proof™
-          </p>
-
-          <p className="text-gray-600 mt-3">
-            Enter your info to start the challenge.
-          </p>
+          <h1 className="text-2xl font-bold text-blue-900">Florida History Hunt™</h1>
+          <p className="text-gray-500 text-sm mt-1">Presented by America 250 Proof™</p>
+          <p className="text-gray-600 mt-3">Enter your info to start the challenge</p>
         </div>
 
         {error && (
@@ -130,10 +98,7 @@ export default function Register() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             First Name <span className="text-red-500">*</span>
           </label>
-
           <input
-            name="given-name"
-            autoComplete="given-name"
             className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Your first name"
             value={form.first_name}
@@ -145,28 +110,21 @@ export default function Register() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Mobile Number <span className="text-red-500">*</span>
           </label>
-
           <input
-            name="tel"
-            autoComplete="tel"
             className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="(555) 555-5555"
             type="tel"
-            inputMode="tel"
+            inputMode="numeric"
             value={form.phone_number}
             onChange={handlePhoneChange}
           />
-
-          {phoneDigits.length > 0 && phoneDigits.length < 10 && (
+          {stripPhone(form.phone_number).length > 0 && stripPhone(form.phone_number).length < 10 && (
             <p className="text-xs text-orange-500 mt-1">
-              {10 - phoneDigits.length} more digits needed
+              {10 - stripPhone(form.phone_number).length} more digits needed
             </p>
           )}
-
-          {phoneDigits.length === 10 && (
-            <p className="text-xs text-green-600 mt-1">
-              ✓ Looks good
-            </p>
+          {stripPhone(form.phone_number).length === 10 && (
+            <p className="text-xs text-green-600 mt-1">✓ Looks good</p>
           )}
         </div>
 
@@ -174,10 +132,7 @@ export default function Register() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Email <span className="text-gray-400 text-xs">(optional)</span>
           </label>
-
           <input
-            name="email"
-            autoComplete="email"
             className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="your@email.com"
             type="email"
@@ -187,20 +142,17 @@ export default function Register() {
         </div>
 
         <div className="space-y-3 mb-6">
+
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               className="mt-1 w-5 h-5 accent-blue-900"
               checked={form.service_affiliation}
-              onChange={e =>
-                setForm({ ...form, service_affiliation: e.target.checked })
-              }
+              onChange={e => setForm({ ...form, service_affiliation: e.target.checked })}
             />
-
             <span className="text-sm text-gray-600">
-              I am a veteran, active-duty service member, military family member,
-              or first responder.
-              <span className="text-gray-400"> (optional)</span>
+              I am a veteran or active duty military member{' '}
+              <span className="text-gray-400">(optional)</span>
             </span>
           </label>
 
@@ -209,42 +161,73 @@ export default function Register() {
               type="checkbox"
               className="mt-1 w-5 h-5 accent-blue-900"
               checked={form.sms_opt_in}
-              onChange={e =>
-                setForm({ ...form, sms_opt_in: e.target.checked })
-              }
+              onChange={e => setForm({ ...form, sms_opt_in: e.target.checked })}
             />
-
             <span className="text-sm text-gray-600">
               I agree to receive educational updates, event information, and
               History Hunt™ notifications via SMS or email.
             </span>
           </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 w-5 h-5 accent-blue-900"
+              checked={form.terms_accepted}
+              onChange={e => setForm({ ...form, terms_accepted: e.target.checked })}
+            />
+            <span className="text-sm text-gray-600">
+              I agree to the{' '}
+              <a href="/legal/terms" target="_blank" className="text-blue-700 underline">
+                Terms of Use
+              </a>{' '}
+              <span className="text-red-500">*</span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 w-5 h-5 accent-blue-900"
+              checked={form.privacy_accepted}
+              onChange={e => setForm({ ...form, privacy_accepted: e.target.checked })}
+            />
+            <span className="text-sm text-gray-600">
+              I have read and accept the{' '}
+              <a href="/legal/privacy" target="_blank" className="text-blue-700 underline">
+                Privacy Policy
+              </a>{' '}
+              <span className="text-red-500">*</span>
+            </span>
+          </label>
+
         </div>
 
         <button
           onClick={handleSubmit}
-          disabled={!canStart}
+          disabled={loading || !form.terms_accepted || !form.privacy_accepted}
           className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-xl font-bold transition-colors"
         >
-          {loading ? 'Starting...' : 'Agree & Play →'}
+          {loading ? 'Starting...' : 'Start the Hunt →'}
         </button>
 
-        <p className="text-center text-xs text-gray-400 mt-4 leading-relaxed">
-          By selecting Agree & Play, you agree to the{' '}
-          <a href="/legal/terms" target="_blank" className="underline">
-            Terms of Use
-          </a>
-          {' '}and acknowledge the{' '}
-          <a href="/legal/privacy" target="_blank" className="underline">
-            Privacy Policy
-          </a>
-          . No purchase necessary. See{' '}
+        <p className="text-center text-xs text-gray-400 mt-4">
+          No purchase necessary. See{' '}
           <a href="/legal/contest-rules" target="_blank" className="underline">
             Contest Rules
-          </a>
-          .
+          </a>{' '}
+          for details.
         </p>
+
       </div>
     </main>
+  )
+}
+
+export default function Register() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-blue-900 flex items-center justify-center text-white text-xl">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   )
 }
