@@ -179,10 +179,7 @@ export default function PlayPage({
     const perfectBadge =
       hunt.game.perfect_score_badge_url || '/badges/jax-perfect-score.png'
     const badgeUrl = isPerfect ? perfectBadge : participantBadge
-    const shareUrl =
-      hunt.game.share_url ||
-      hunt.game.public_play_url ||
-      `https://america250proof.com/play/${qrSlug}`
+    const shareUrl = hunt.game.share_url || ''
     const shareTitle =
       hunt.game.share_title ||
       'I completed the America 250 Proof™ History Hunt'
