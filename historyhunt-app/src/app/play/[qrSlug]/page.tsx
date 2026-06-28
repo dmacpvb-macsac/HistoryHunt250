@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { resolveGameFromQr } from '@/lib/gameLoader'
 import { supabase } from '@/lib/supabase'
 
-const SONG_URL = 'https://america250proof.com/go/'
+const BONUS_VIDEO_URL = 'https://www.youtube.com/watch?v=drnBrAmbNHE'
+const LISTEN_EVERYWHERE_URL = 'https://america250proof.com/go/'
 
 export default function PlayPage({
   params,
@@ -24,6 +25,7 @@ export default function PlayPage({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [copiedShareLink, setCopiedShareLink] = useState(false)
 
   useEffect(() => {
     async function start() {
@@ -160,6 +162,16 @@ export default function PlayPage({
     setSelected('')
   }
 
+  async function copyShareLink(shareUrl: string) {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopiedShareLink(true)
+      window.setTimeout(() => setCopiedShareLink(false), 2500)
+    } catch {
+      window.prompt('Copy this link to share your badge:', shareUrl)
+    }
+  }
+
   if (finished) {
     const isPerfect = score === hunt.game.total_points
     const participantBadge =
@@ -167,6 +179,21 @@ export default function PlayPage({
     const perfectBadge =
       hunt.game.perfect_score_badge_url || '/badges/jax-perfect-score.png'
     const badgeUrl = isPerfect ? perfectBadge : participantBadge
+    const shareUrl =
+      hunt.game.share_url ||
+      hunt.game.public_play_url ||
+      `https://america250proof.com/play/${qrSlug}`
+    const shareTitle =
+      hunt.game.share_title ||
+      'I completed the America 250 Proof™ History Hunt'
+    const shareText =
+      hunt.game.share_text ||
+      'I earned my History Hunt™ badge. Can you beat my score?'
+    const badgeShareEnabled = hunt.game.badge_share_enabled !== false
+    const badgeDownloadEnabled = hunt.game.badge_download_enabled !== false
+    const encodedShareUrl = encodeURIComponent(shareUrl)
+    const encodedShareTitle = encodeURIComponent(shareTitle)
+    const encodedShareText = encodeURIComponent(`${shareText} ${shareUrl}`)
 
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
@@ -217,22 +244,68 @@ export default function PlayPage({
             )}
           </div>
 
-          <a
-            href={badgeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            download
-            className="block mt-6 bg-yellow-500 text-blue-950 rounded-xl p-4 text-xl font-bold"
-          >
-            💾 Save My Badge
-          </a>
+          {badgeDownloadEnabled && (
+            <a
+              href={badgeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="block mt-6 bg-yellow-500 text-blue-950 rounded-xl p-4 text-xl font-bold"
+            >
+              💾 Save My Badge
+            </a>
+          )}
 
-          <p className="mt-3 text-sm text-gray-500">
-            Share your badge on Facebook, Instagram, X, LinkedIn, or your favorite social platform.
-          </p>
+          {badgeShareEnabled && (
+            <div className="mt-6 border-t pt-6">
+              <p className="text-sm font-bold text-blue-900 uppercase tracking-wide">
+                Share Your Badge
+              </p>
+
+              <p className="mt-2 text-sm text-gray-600">
+                Invite friends, family, classmates, or guests to play the same History Hunt.
+              </p>
+
+              <button
+                onClick={() => copyShareLink(shareUrl)}
+                className="mt-4 w-full bg-blue-900 text-white rounded-xl p-4 text-lg font-bold"
+              >
+                {copiedShareLink ? '✅ Link Copied!' : '🔗 Copy Share Link'}
+              </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodedShareUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-blue-700 text-white rounded-xl p-3 font-bold"
+                >
+                  Facebook
+                </a>
+
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodedShareText}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-slate-900 text-white rounded-xl p-3 font-bold"
+                >
+                  X
+                </a>
+
+                <a
+                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedShareUrl}&title=${encodedShareTitle}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-blue-800 text-white rounded-xl p-3 font-bold"
+                >
+                  LinkedIn
+                </a>
+              </div>
+            </div>
+          )}
 
           <a
-            href={SONG_URL}
+            href={LISTEN_EVERYWHERE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="block mt-6 bg-red-600 text-white rounded-xl p-4 text-xl font-bold"
@@ -289,7 +362,7 @@ export default function PlayPage({
             <p className="font-bold">🎵 Bonus Challenge</p>
             <p className="text-sm mt-1">{q.youtube_prompt}</p>
             <a
-              href={SONG_URL}
+              href={BONUS_VIDEO_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block mt-3 bg-red-600 text-white px-4 py-2 rounded-lg font-bold"
