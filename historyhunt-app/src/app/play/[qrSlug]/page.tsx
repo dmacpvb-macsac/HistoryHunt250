@@ -267,11 +267,11 @@ export default function PlayPage({
   return (
     <main className="min-h-screen bg-slate-100 p-4">
       <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl p-6">
-        <p className="text-center text-lg font-bold text-red-700 tracking-wide">
+        <p className="text-center text-2x1 font-bold text-red-700 tracking-wide">
           {hunt.campaign?.title || 'History Hunt™'}
         </p>
 
-        <h1 className="text-center text-3xl font-bold text-blue-900 mt-1">
+        <h1 className="text-center text-2xl font-bold text-blue-900 mt-1">
           {hunt.game.title}
         </h1>
 
