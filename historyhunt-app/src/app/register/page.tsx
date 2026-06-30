@@ -26,7 +26,7 @@ function formatPhone(value: string): string {
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const qrSlug = searchParams.get('play') || ''
+  const qrSlug = searchParams.get('qrSlug') || searchParams.get('play') || ''
 
   const [form, setForm] = useState({
     first_name: '',
@@ -62,35 +62,78 @@ function RegisterForm() {
     setLoading(true)
     setError('')
 
-    const { data, error: dbError } = await supabase
+    const { data: existingPlayer, error: lookupError } = await supabase
       .from('players')
-      .insert([{
-        first_name: form.first_name.trim(),
-        phone_number: phoneDigits,
-        country_code: countryCode,
-        country_iso: countryIso,
-        phone_e164: phoneE164,
-        email: form.email.trim() || null,
-        sms_opt_in: form.sms_opt_in,
-        service_affiliation: form.service_affiliation,
-        terms_accepted: true,
-        privacy_accepted: true,
-        source: 'qr',
-      }])
-      .select()
-      .single()
+      .select('player_id, first_name')
+      .eq('phone_number', phoneDigits)
+      .maybeSingle()
 
-    if (dbError) {
-      setError(dbError.message)
+    if (lookupError) {
+      setError(lookupError.message)
       setLoading(false)
       return
     }
 
-    localStorage.setItem('player_id', data.player_id)
-    localStorage.setItem('player_name', data.first_name)
+    let playerId = existingPlayer?.player_id
+    let playerName = existingPlayer?.first_name || form.first_name.trim()
+
+    if (playerId) {
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({
+          first_name: form.first_name.trim(),
+          country_code: countryCode,
+          country_iso: countryIso,
+          phone_e164: phoneE164,
+          email: form.email.trim() || null,
+          sms_opt_in: form.sms_opt_in,
+          service_affiliation: form.service_affiliation,
+          terms_accepted: true,
+          privacy_accepted: true,
+        })
+        .eq('player_id', playerId)
+
+      if (updateError) {
+        setError(updateError.message)
+        setLoading(false)
+        return
+      }
+
+      playerName = form.first_name.trim()
+    } else {
+      const { data, error: dbError } = await supabase
+        .from('players')
+        .insert([{
+          first_name: form.first_name.trim(),
+          phone_number: phoneDigits,
+          country_code: countryCode,
+          country_iso: countryIso,
+          phone_e164: phoneE164,
+          email: form.email.trim() || null,
+          sms_opt_in: form.sms_opt_in,
+          service_affiliation: form.service_affiliation,
+          terms_accepted: true,
+          privacy_accepted: true,
+          source: 'qr',
+        }])
+        .select()
+        .single()
+
+      if (dbError) {
+        setError(dbError.message)
+        setLoading(false)
+        return
+      }
+
+      playerId = data.player_id
+      playerName = data.first_name
+    }
+
+    localStorage.setItem('player_id', playerId)
+    localStorage.setItem('player_name', playerName)
     localStorage.setItem('qr_slug', qrSlug)
 
-    router.push(qrSlug ? `/play/${qrSlug}` : '/')
+    router.push(qrSlug ? `/play/${encodeURIComponent(qrSlug)}` : '/')
   }
 
   return (
