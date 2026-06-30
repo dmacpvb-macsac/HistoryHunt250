@@ -80,7 +80,7 @@ export default function PlayPage({
         let activeSessionId = existingSession?.session_id
 
         if (activeSessionId) {
-          await supabase
+          const { error: resetSessionError } = await supabase
             .from('sessions')
             .update({
               score: 0,
@@ -89,10 +89,20 @@ export default function PlayPage({
             })
             .eq('session_id', activeSessionId)
 
-          await supabase
+          if (resetSessionError) {
+            console.error('SESSION RESET ERROR', resetSessionError)
+            throw new Error(resetSessionError.message || 'Unable to reset existing game session.')
+          }
+
+          const { error: cleanupResponsesError } = await supabase
             .from('responses')
             .delete()
             .eq('session_id', activeSessionId)
+
+          if (cleanupResponsesError) {
+            console.error('RESPONSE CLEANUP ERROR', cleanupResponsesError)
+            throw new Error(cleanupResponsesError.message || 'Unable to reset existing answers.')
+          }
         } else {
           const { data: newSession, error: sessionError } = await supabase
             .from('sessions')
@@ -155,25 +165,33 @@ export default function PlayPage({
       setScore(scoreRef.current)
     }
 
+    const { error: existingResponseDeleteError } = await supabase
+      .from('responses')
+      .delete()
+      .eq('session_id', sessionId)
+      .eq('question_id', question.question_id)
+
+    if (existingResponseDeleteError) {
+      console.error('EXISTING RESPONSE DELETE ERROR', existingResponseDeleteError)
+      setError(existingResponseDeleteError.message || 'Unable to reset this answer. Please try again.')
+      return
+    }
+
     const { error: responseError } = await supabase
       .from('responses')
-      .upsert(
-        {
-          session_id: sessionId,
-          player_id: playerId,
-          game_id: hunt.game.game_id,
-          question_id: question.question_id,
-          selected_answer: choice,
-          correct,
-          points_awarded: pointsAwarded,
-        },
-        {
-          onConflict: 'session_id,question_id',
-        }
-      )
+      .insert({
+        session_id: sessionId,
+        player_id: playerId,
+        game_id: hunt.game.game_id,
+        question_id: question.question_id,
+        selected_answer: choice,
+        correct,
+        points_awarded: pointsAwarded,
+      })
 
     if (responseError) {
-      setError('Unable to save your answer. Please try again.')
+      console.error('RESPONSE INSERT ERROR', responseError)
+      setError(responseError.message || 'Unable to save your answer. Please try again.')
     }
   }
 
