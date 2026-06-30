@@ -51,6 +51,16 @@ export async function resolveGameFromQr(qrSlug: string) {
       total_points,
       participant_badge_url,
       perfect_score_badge_url,
+      share_url,
+      share_title,
+      share_text,
+      badge_share_enabled,
+      badge_download_enabled,
+      status,
+      starts_at,
+      ends_at,
+      countdown_enabled,
+      leaderboard_enabled,
       active
     `)
     .eq("campaign_id", venueRaw.campaign_id)

@@ -1,12 +1,15 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import Image from 'next/image'
+import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { resolveGameFromQr } from '@/lib/gameLoader'
 import { supabase } from '@/lib/supabase'
 
 const BONUS_VIDEO_URL = 'https://www.youtube.com/watch?v=drnBrAmbNHE'
 const LISTEN_EVERYWHERE_URL = 'https://america250proof.com/go/'
+
+type HuntData = Awaited<ReturnType<typeof resolveGameFromQr>>
 
 export default function PlayPage({
   params,
@@ -16,12 +19,14 @@ export default function PlayPage({
   const { qrSlug } = use(params)
   const router = useRouter()
 
-  const [hunt, setHunt] = useState<any>(null)
+  const [hunt, setHunt] = useState<HuntData | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [current, setCurrent] = useState(0)
   const [selected, setSelected] = useState('')
   const [score, setScore] = useState(0)
+  const scoreRef = useRef(0)
   const [finished, setFinished] = useState(false)
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -38,7 +43,83 @@ export default function PlayPage({
         }
 
         const data = await resolveGameFromQr(qrSlug)
+
+        const { status: gameStatus, starts_at: startsAt, ends_at: endsAt } = data.game
+        const now = new Date()
+
+        if (gameStatus === 'draft' || gameStatus === 'archived') {
+          throw new Error('This History Hunt is not currently available.')
+        }
+
+        if (startsAt && now < new Date(startsAt)) {
+          throw new Error('This History Hunt has not started yet. Please check back soon.')
+        }
+
+        if (endsAt && now > new Date(endsAt)) {
+          throw new Error('This History Hunt has ended. Thanks for playing!')
+        }
+
         setHunt(data)
+
+        // Check for an existing, unfinished session for this player + game
+        // before creating a new one. This prevents abandoned 0-score rows
+        // from piling up every time a player reloads, backs out, or restarts.
+        const { data: existingSession, error: existingSessionError } = await supabase
+          .from('sessions')
+          .select('session_id, score, completed')
+          .eq('player_id', playerId)
+          .eq('game_id', data.game.game_id)
+          .eq('completed', false)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (existingSessionError) {
+          throw new Error(existingSessionError.message)
+        }
+
+        if (existingSession) {
+          // Resume the existing in-progress session row rather than creating
+          // a new one, but restart the question flow from the beginning so
+          // we never risk double-counting points for already-answered
+          // questions (we are not persisting which question index a player
+          // was on, only their session and per-question responses).
+          setSessionId(existingSession.session_id)
+          scoreRef.current = 0
+          setScore(0)
+          setLoading(false)
+          return
+        }
+
+        // No in-progress session found. Before starting a brand new attempt,
+        // check whether this player has ALREADY completed this game. If so,
+        // this is their official, final attempt for badge/leaderboard
+        // purposes — show their existing result instead of silently
+        // minting a new scored session and letting them replay for a
+        // better score.
+        const { data: completedSession, error: completedSessionError } = await supabase
+          .from('sessions')
+          .select('session_id, score')
+          .eq('player_id', playerId)
+          .eq('game_id', data.game.game_id)
+          .eq('completed', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (completedSessionError) {
+          throw new Error(completedSessionError.message)
+        }
+
+        if (completedSession) {
+          scoreRef.current = completedSession.score ?? 0
+          setScore(completedSession.score ?? 0)
+          setSessionId(completedSession.session_id)
+          setAlreadyCompleted(true)
+          setFinished(true)
+          setLoading(false)
+          return
+        }
 
         const { data: session, error: sessionError } = await supabase
           .from('sessions')
@@ -65,8 +146,11 @@ export default function PlayPage({
         }
 
         setSessionId(session.session_id)
-      } catch (err: any) {
-        setError(err.message || 'Unable to load History Hunt.')
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Unable to load History Hunt.'
+
+        setError(message)
       } finally {
         setLoading(false)
       }
@@ -92,7 +176,8 @@ export default function PlayPage({
 
   if (!hunt) return null
 
-  const questions = hunt.questions
+  const huntData = hunt
+  const questions = huntData.questions
   const q = questions[current]
 
   const choices = [
@@ -115,22 +200,30 @@ export default function PlayPage({
     const pointsAwarded = isCorrect ? q.points : 0
 
     if (isCorrect) {
-      setScore(prev => prev + pointsAwarded)
+      scoreRef.current += pointsAwarded
+      setScore(scoreRef.current)
     }
 
     const playerId = localStorage.getItem('player_id')
 
+    if (!playerId) {
+      setError('Your session expired. Please rejoin the Hunt.')
+      setSaving(false)
+      router.push(`/register?play=${qrSlug}`)
+      return
+    }
+
     const { error: responseError } = await supabase
       .from('responses')
-      .insert([{
+      .upsert([{
         session_id: sessionId,
         player_id: playerId,
-        game_id: hunt.game.game_id,
+        game_id: huntData.game.game_id,
         question_id: q.question_id,
         selected_answer: choiceKey,
         correct: isCorrect,
         points_awarded: pointsAwarded,
-      }])
+      }], { onConflict: 'session_id,question_id' })
 
     if (responseError) {
       setError(responseError.message)
@@ -141,7 +234,7 @@ export default function PlayPage({
 
   async function nextQuestion() {
     if (current === questions.length - 1) {
-      const finalScore = score
+      const finalScore = scoreRef.current
 
       if (sessionId) {
         await supabase
@@ -173,21 +266,23 @@ export default function PlayPage({
   }
 
   if (finished) {
-    const isPerfect = score === hunt.game.total_points
+    const isPerfect = score === huntData.game.total_points
     const participantBadge =
-      hunt.game.participant_badge_url || '/badges/jax-participant.png'
+      huntData.game.participant_badge_url || '/badges/jax-participant.png'
     const perfectBadge =
-      hunt.game.perfect_score_badge_url || '/badges/jax-perfect-score.png'
+      huntData.game.perfect_score_badge_url || '/badges/jax-perfect-score.png'
     const badgeUrl = isPerfect ? perfectBadge : participantBadge
-    const shareUrl = hunt.game.share_url || ''
+    const shareUrl =
+      huntData.game.share_url ||
+      (typeof window !== 'undefined' ? window.location.href : '')
     const shareTitle =
-      hunt.game.share_title ||
+      huntData.game.share_title ||
       'I completed the America 250 Proof™ History Hunt'
     const shareText =
-      hunt.game.share_text ||
+      huntData.game.share_text ||
       'I earned my History Hunt™ badge. Can you beat my score?'
-    const badgeShareEnabled = hunt.game.badge_share_enabled !== false
-    const badgeDownloadEnabled = hunt.game.badge_download_enabled !== false
+    const badgeShareEnabled = huntData.game.badge_share_enabled !== false
+    const badgeDownloadEnabled = huntData.game.badge_download_enabled !== false
     const encodedShareUrl = encodeURIComponent(shareUrl)
     const encodedShareTitle = encodeURIComponent(shareTitle)
     const encodedShareText = encodeURIComponent(`${shareText} ${shareUrl}`)
@@ -196,15 +291,21 @@ export default function PlayPage({
       <main className="min-h-screen bg-slate-100 p-6 text-center">
         <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
           <h1 className="text-3xl font-bold text-blue-900">
-            Hunt Complete!
+            {alreadyCompleted ? 'You Already Completed This Hunt!' : 'Hunt Complete!'}
           </h1>
 
+          {alreadyCompleted && (
+            <p className="text-sm text-gray-500 mt-2">
+              Here's the result from your earlier attempt. Each player gets one official score per Hunt.
+            </p>
+          )}
+
           <p className="text-gray-600 mt-2">
-            {hunt.campaign.title}
+            {huntData.campaign.title}
           </p>
 
           <p className="text-4xl font-bold mt-6 text-blue-900">
-            {score} / {hunt.game.total_points}
+            {score} / {huntData.game.total_points}
           </p>
 
           <p className="mt-2 text-gray-600">
@@ -212,10 +313,13 @@ export default function PlayPage({
           </p>
 
           <div className="mt-6">
-            <img
+            <Image
               src={badgeUrl}
               alt={isPerfect ? 'Perfect Score Badge' : 'Participant Badge'}
-              className="w-72 mx-auto"
+              width={288}
+              height={288}
+              className="w-72 h-auto mx-auto"
+              priority
             />
           </div>
 
@@ -266,16 +370,22 @@ export default function PlayPage({
               <button
                 onClick={() => copyShareLink(shareUrl)}
                 className="mt-4 w-full bg-blue-900 text-white rounded-xl p-4 text-lg font-bold"
+                aria-live="polite"
               >
                 {copiedShareLink ? '✅ Link Copied!' : '🔗 Copy Share Link'}
               </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+              <div
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3"
+                role="group"
+                aria-label="Share your badge on social media"
+              >
                 <a
                   href={`https://www.facebook.com/sharer/sharer.php?u=${encodedShareUrl}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block bg-blue-700 text-white rounded-xl p-3 font-bold"
+                  aria-label="Share your badge on Facebook"
                 >
                   Facebook
                 </a>
@@ -285,6 +395,7 @@ export default function PlayPage({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block bg-slate-900 text-white rounded-xl p-3 font-bold"
+                  aria-label="Share your badge on X"
                 >
                   X
                 </a>
@@ -294,6 +405,7 @@ export default function PlayPage({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block bg-blue-800 text-white rounded-xl p-3 font-bold"
+                  aria-label="Share your badge on LinkedIn"
                 >
                   LinkedIn
                 </a>
@@ -326,10 +438,13 @@ export default function PlayPage({
   return (
     <main className="min-h-screen bg-slate-100 p-6">
       <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
-        <img
-          src="/history-hunt-logo.png"
+        <Image
+          src="/logos/historyhunt/history-hunt-logo.png"
           alt="History Hunt"
-          className="w-36 mx-auto mb-4"
+          width={144}
+          height={144}
+          className="w-36 h-auto mx-auto mb-4"
+          priority
         />
 
         <p className="text-sm font-bold text-red-600">
@@ -338,11 +453,11 @@ export default function PlayPage({
         </p>
 
         <h1 className="text-2xl font-bold text-blue-900 mt-2">
-          {hunt.game.title}
+          {huntData.game.title}
         </h1>
 
         <p className="text-gray-500">
-          {hunt.venue.name}
+          {huntData.venue.name}
         </p>
 
         {q.lyric && (
