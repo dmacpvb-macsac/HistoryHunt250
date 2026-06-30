@@ -67,6 +67,19 @@ export default function PlayPage({
           return
         }
 
+        const { data: playerExists } = await supabase
+          .from('players')
+          .select('player_id')
+          .eq('player_id', playerId)
+          .maybeSingle()
+
+        if (!playerExists) {
+          localStorage.removeItem('player_id')
+          localStorage.removeItem('player_name')
+          router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
+          return
+        }
+
         const { data: existingSession } = await supabase
           .from('sessions')
           .select('session_id')
