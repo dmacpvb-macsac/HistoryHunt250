@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
-import { supabase } from '@/lib/supabase'
+import { importWorkbook } from '@/lib/importer/importWorkbook'
 import { validateWorkbook } from '@/lib/importer/validateWorkbook'
 import type { ImportIssue, ValidatedWorkbook, WorkbookSheets } from '@/lib/importer/types'
+import type { ImportWorkbookResult } from '@/lib/importer/importWorkbook'
 
 function rowsFromSheet(workbook: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] {
   const sheet = workbook.Sheets[sheetName]
@@ -60,6 +61,7 @@ export default function AdminImportPage() {
   const [validated, setValidated] = useState<ValidatedWorkbook | null>(null)
   const [parsedSheets, setParsedSheets] = useState<WorkbookSheets | null>(null)
   const [createdBatchNumber, setCreatedBatchNumber] = useState('')
+  const [importResult, setImportResult] = useState<ImportWorkbookResult | null>(null)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -71,6 +73,7 @@ export default function AdminImportPage() {
     setValidated(null)
     setParsedSheets(null)
     setCreatedBatchNumber('')
+    setImportResult(null)
     setFileName(file.name)
 
     try {
@@ -102,106 +105,36 @@ export default function AdminImportPage() {
     setWorking(true)
     setMessage('')
     setCreatedBatchNumber('')
+    setImportResult(null)
+
+    if (!validated.summary.canImport || validated.errors.length > 0) {
+      setMessage('Blocking errors found. Fix the workbook before running the atomic game import.')
+      setWorking(false)
+      return
+    }
 
     const batchNumber = makeBatchNumber()
-    const hasErrors = validated.errors.length > 0
 
     try {
-      const { data: batch, error: batchError } = await supabase
-        .from('import_batches')
-        .insert([{
-          batch_number: batchNumber,
-          workbook_name: fileName,
-          workbook_version: 'RC2-MVP',
-          source_file_checksum: fileChecksum,
-          importer_version: 'RC2-importer-mvp-0.2',
-          submitted_by: validated.huntInfo?.contributorName || null,
-          submitted_email: validated.huntInfo?.contributorEmail || null,
-          organization: validated.huntInfo?.organizationName || null,
-          review_status: hasErrors ? 'changes_requested' : 'submitted',
-          import_status: hasErrors ? 'failed' : 'validated',
-          game_slug: validated.huntInfo?.gameSlug || null,
-          notes: hasErrors
-            ? 'Validation batch created with blocking errors. Fix workbook and re-upload before game import.'
-            : 'Validation batch created successfully. Game data write remains intentionally disabled until preview/review is approved.',
-        }])
-        .select()
-        .single()
+      const result = await importWorkbook({
+        validated,
+        parsedSheets,
+        workbookName: fileName,
+        fileChecksum,
+        batchNumber,
+        workbookVersion: 'Engineering Workbook v1',
+        importerVersion: 'RC1.4-importer-0.1',
+        createdBy: 'admin/import',
+        siteOrigin: 'https://play.historyhuntgames.com',
+      })
 
-      if (batchError) throw new Error(batchError.message)
-
-      const huntInfoRows = parsedSheets.huntInfo.map((rawRow, index) => ({
-        import_batch_id: batch.import_batch_id,
-        sheet_name: 'Hunt Info',
-        row_number: index + 2,
-        row_data: {
-          raw: rawRow,
-          normalized: index === 0 ? validated.huntInfo || null : null,
-        },
-        status: hasErrors ? 'parsed_with_errors' : 'validated',
-      }))
-
-      const questionRows = parsedSheets.questions.map((rawRow, index) => ({
-        import_batch_id: batch.import_batch_id,
-        sheet_name: 'Questions',
-        row_number: index + 2,
-        row_data: {
-          raw: rawRow,
-          normalized: validated.questions[index] || null,
-        },
-        status: hasErrors ? 'parsed_with_errors' : 'validated',
-      }))
-
-      const rowPayload = [...huntInfoRows, ...questionRows]
-
-      if (rowPayload.length > 0) {
-        const { error: rowsError } = await supabase
-          .from('import_batch_rows')
-          .insert(rowPayload)
-
-        if (rowsError) throw new Error(rowsError.message)
-      }
-
-      const errorPayload = validated.errors.map(error => ({
-        import_batch_id: batch.import_batch_id,
-        sheet_name: error.sheetName,
-        row_number: error.rowNumber || null,
-        field_name: error.fieldName || null,
-        error_code: error.code,
-        error_message: error.message,
-      }))
-
-      if (errorPayload.length > 0) {
-        const { error: errorsError } = await supabase
-          .from('import_errors')
-          .insert(errorPayload)
-
-        if (errorsError) throw new Error(errorsError.message)
-      }
-
-      const warningPayload = validated.warnings.map(warning => ({
-        import_batch_id: batch.import_batch_id,
-        sheet_name: warning.sheetName,
-        row_number: warning.rowNumber || null,
-        field_name: warning.fieldName || null,
-        warning_code: warning.code,
-        warning_message: warning.message,
-      }))
-
-      if (warningPayload.length > 0) {
-        const { error: warningsError } = await supabase
-          .from('import_warnings')
-          .insert(warningPayload)
-
-        if (warningsError) throw new Error(warningsError.message)
-      }
-
-      setCreatedBatchNumber(batchNumber)
-      setMessage(hasErrors
-        ? `Validation batch saved: ${batchNumber}. Blocking errors were recorded. Do not import this workbook until corrected.`
-        : `Import batch created: ${batchNumber}. Rows, warnings, checksum, and provenance were saved. Game write step can now be added safely.`)
+      setCreatedBatchNumber(result.batchNumber)
+      setImportResult(result)
+      setMessage(
+        `Import complete: ${result.batchNumber}. Game "${result.gameSlug}" imported with ${result.questionsImported} questions and ${result.totalPoints} total points.`
+      )
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to create import batch.'
+      const message = error instanceof Error ? error.message : 'Unable to run atomic game import.'
       setMessage(message)
     } finally {
       setWorking(false)
@@ -213,13 +146,13 @@ export default function AdminImportPage() {
       <div className="mx-auto max-w-5xl">
         <div className="rounded-3xl bg-white p-6 shadow-xl">
           <p className="text-sm font-bold uppercase tracking-wide text-red-600">
-            History Hunt™ RC2 Admin
+            History Hunt™ RC1.4 Admin
           </p>
           <h1 className="mt-2 text-3xl font-bold text-blue-900">
             Bulk Game Importer
           </h1>
           <p className="mt-3 text-gray-600">
-            Upload a workbook, validate Hunt Info and Questions, preview issues, and create a permanent import batch with row-level audit history. This screen does not publish live gameplay.
+            Upload an Engineering Workbook, validate Hunt Info and Questions, preview issues, and run the atomic game import.
           </p>
 
           <div className="mt-6 rounded-2xl border border-dashed border-blue-300 bg-blue-50 p-6">
@@ -234,7 +167,7 @@ export default function AdminImportPage() {
               className="mt-4 block w-full rounded-xl border bg-white p-3"
             />
             <p className="mt-2 text-sm text-gray-600">
-              Required tabs for RC2 MVP: Hunt Info and Questions.
+              Required tabs for RC1.4: Hunt Info and Questions.
             </p>
           </div>
 
@@ -246,8 +179,40 @@ export default function AdminImportPage() {
             <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 font-semibold text-blue-900">
               {message}
               {createdBatchNumber && (
-                <div className="mt-2 text-sm font-bold">Batch ID: {createdBatchNumber}</div>
+                <div className="mt-2 text-sm font-bold">Batch Number: {createdBatchNumber}</div>
               )}
+            </div>
+          )}
+
+          {importResult && (
+            <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-900">
+              <p className="font-bold">Playable URL</p>
+              <a
+                href={importResult.publicPlayUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 block break-all underline"
+              >
+                {importResult.publicPlayUrl}
+              </a>
+
+              <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+                <div>
+                  <span className="font-bold">Campaign ID:</span>
+                  <br />
+                  <span className="break-all">{importResult.campaignId}</span>
+                </div>
+                <div>
+                  <span className="font-bold">Venue ID:</span>
+                  <br />
+                  <span className="break-all">{importResult.venueId}</span>
+                </div>
+                <div>
+                  <span className="font-bold">Game ID:</span>
+                  <br />
+                  <span className="break-all">{importResult.gameId}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -293,18 +258,18 @@ export default function AdminImportPage() {
             <div className="mt-6 rounded-xl bg-slate-50 p-4">
               <p className="font-bold text-blue-900">Gate Status</p>
               {validated.summary.canImport ? (
-                <p className="mt-1 text-green-700">No blocking errors. Ready to save validation batch.</p>
+                <p className="mt-1 text-green-700">No blocking errors. Ready to run atomic game import.</p>
               ) : (
-                <p className="mt-1 text-red-700">Blocking errors found. You may still save the validation batch for audit history, but do not import game data.</p>
+                <p className="mt-1 text-red-700">Blocking errors found. Fix the workbook before importing game data.</p>
               )}
             </div>
 
             <button
-              disabled={working}
+              disabled={working || !validated.summary.canImport}
               onClick={createImportBatch}
               className="mt-6 rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              Save Validation Batch
+              Run Atomic Game Import
             </button>
           </div>
         )}
