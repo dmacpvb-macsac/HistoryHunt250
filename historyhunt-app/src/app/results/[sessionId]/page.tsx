@@ -14,6 +14,7 @@ export default function ResultsPage({
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [nativeShareSupported, setNativeShareSupported] = useState(false)
 
   const [session, setSession] = useState<any>(null)
   const [player, setPlayer] = useState<any>(null)
@@ -57,6 +58,13 @@ export default function ResultsPage({
     loadResults()
   }, [sessionId])
 
+  useEffect(() => {
+    setNativeShareSupported(
+      typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function'
+    )
+  }, [])
+
   const isPerfect = session && Number(session.score) >= Number(session.total_points)
 
   const badgeUrl = useMemo(() => {
@@ -84,6 +92,26 @@ export default function ResultsPage({
 
   const listenUrl = 'https://interceptmusic.lnk.to/fwCUA4'
   const songInfoUrl = 'https://america250proof.com'
+
+  async function nativeShare() {
+    if (
+      typeof navigator === 'undefined' ||
+      typeof navigator.share !== 'function'
+    ) {
+      return
+    }
+
+    try {
+      await navigator.share({
+        title: shareTitle,
+        text: shareText,
+        url: playUrl,
+      })
+    } catch {
+      // User cancelled or platform declined the native share sheet.
+      // Existing fallback remains available on non-supporting browsers.
+    }
+  }
 
   if (loading) {
     return (
@@ -150,7 +178,24 @@ export default function ResultsPage({
           </section>
         )}
 
-        {game.badge_share_enabled !== false && (
+        {game.badge_share_enabled !== false && nativeShareSupported && (
+          <section className="mt-8 border-t border-slate-200 pt-6 text-center">
+            <h2 className="text-xl font-black text-blue-900">Share Your Badge</h2>
+            <p className="mt-2 text-slate-700">
+              Open your phone&apos;s share sheet to post, text, or send this hunt.
+            </p>
+
+            <button
+              type="button"
+              onClick={nativeShare}
+              className="mt-5 inline-flex items-center justify-center rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white"
+            >
+              Share →
+            </button>
+          </section>
+        )}
+
+        {game.badge_share_enabled !== false && !nativeShareSupported && (
           <ShareBar
             shareUrl={playUrl}
             shareTitle={shareTitle}
