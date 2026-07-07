@@ -139,12 +139,25 @@ function parseQuestion(row: Record<string, unknown>): QuestionImportRow {
   }
 }
 
+function isBlankQuestionRow(row: Record<string, unknown>): boolean {
+  return (
+    !value(row, 'Sequence Number', 'Sort Order') &&
+    !value(row, 'Question Text') &&
+    !value(row, 'Choice A') &&
+    !value(row, 'Choice B') &&
+    !value(row, 'Choice C') &&
+    !value(row, 'Choice D') &&
+    !value(row, 'Correct Choice', 'Correct Answer') &&
+    !value(row, 'Educational Fact')
+  )
+}
+
 export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
   const errors: ImportIssue[] = []
   const warnings: ImportIssue[] = []
 
   const huntInfoRows = sheets.huntInfo || []
-  const questionRows = sheets.questions || []
+  const questionRows = (sheets.questions || []).filter(row => !isBlankQuestionRow(row))
 
   if (huntInfoRows.length === 0) {
     addIssue(errors, 'error', 'Hunt Info', 'MISSING_HUNT_INFO', 'Hunt Info tab must contain at least one row.')
