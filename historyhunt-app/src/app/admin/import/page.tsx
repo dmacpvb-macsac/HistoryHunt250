@@ -67,6 +67,22 @@ async function readResponseBody(response: Response): Promise<Record<string, unkn
   }
 }
 
+function readWorkbookVersionFromSheets(sheets: WorkbookSheets) {
+  const fallback = 'Engineering Workbook v1'
+  const huntInfoRow = sheets.huntInfo[0]
+
+  if (!huntInfoRow) return fallback
+
+  const versionEntry = Object.entries(huntInfoRow).find(([key]) => (
+    key.toLowerCase().replace(/[^a-z0-9]/g, '') === 'workbookversion'
+  ))
+
+  const value = versionEntry?.[1]
+  const version = value === null || value === undefined ? '' : String(value).trim()
+
+  return version || fallback
+}
+
 function IssueList({ title, issues }: { title: string; issues: ImportIssue[] }) {
   if (issues.length === 0) return null
 
@@ -241,7 +257,7 @@ export default function AdminImportPage() {
       setFileChecksum(checksum)
 
       const buffer = await file.arrayBuffer()
-      const workbook = XLSX.read(buffer, { type: 'array' })
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
 
       const sheets: WorkbookSheets = {
         huntInfo: rowsFromSheet(workbook, 'Hunt Info'),
@@ -304,7 +320,7 @@ export default function AdminImportPage() {
       workbookName: fileName,
       fileChecksum,
       batchNumber,
-      workbookVersion: 'Engineering Workbook v1',
+      workbookVersion: readWorkbookVersionFromSheets(parsedSheets),
       importerVersion: 'RC1.4-importer-0.1',
       createdBy: 'admin/import',
       siteOrigin: 'https://play.historyhuntgames.com',
@@ -371,10 +387,10 @@ export default function AdminImportPage() {
       <div className="mx-auto max-w-5xl">
         <div className="rounded-3xl bg-white p-6 shadow-xl">
           <p className="text-sm font-bold uppercase tracking-wide text-red-600">
-            History Hunt™ RC1.4 Admin
+            History Hunt™ Admin
           </p>
           <h1 className="mt-2 text-3xl font-bold text-blue-900">
-            Bulk Game Importer
+            History Hunt Importer
           </h1>
           <p className="mt-3 text-gray-600">
             Upload an Engineering Workbook, validate Hunt Info and Questions, preview issues, and run the atomic game import.

@@ -1,4 +1,3 @@
-import { supabase } from '@/lib/supabase'
 import type {
   HuntInfo,
   ImportIssue,
@@ -65,6 +64,8 @@ type RpcImportPayload = {
 const DEFAULT_WORKBOOK_VERSION = 'Engineering Workbook v1'
 const DEFAULT_IMPORTER_VERSION = 'RC1.4-importer-0.1'
 const DEFAULT_SITE_ORIGIN = 'https://america250proof.com'
+const MIN_PLAUSIBLE_YEAR = 2000
+const MAX_PLAUSIBLE_YEAR = 2100
 
 export function makeImportBatchNumber(date = new Date()) {
   const year = date.getFullYear()
@@ -77,10 +78,23 @@ function cleanText(value?: string | null) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function normalizeDateTime(value?: string) {
-  if (!value) return null
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return null
+function normalizeDateTime(value?: string | Date | number | null) {
+  if (value === null || value === undefined || value === '') return null
+
+  const parsed = value instanceof Date ? value : new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid date/time value in workbook: ${String(value)}`)
+  }
+
+  const year = parsed.getUTCFullYear()
+
+  if (year < MIN_PLAUSIBLE_YEAR || year > MAX_PLAUSIBLE_YEAR) {
+    throw new Error(
+      `Implausible date/time value in workbook: ${String(value)} parsed as year ${year}. Check that Excel date cells were read as dates, not serial numbers.`
+    )
+  }
+
   return parsed.toISOString()
 }
 
@@ -88,6 +102,18 @@ function canonicalPlayUrl(huntInfo: HuntInfo, siteOrigin: string) {
   if (huntInfo.publicPlayUrl) return huntInfo.publicPlayUrl
   const origin = siteOrigin.replace(/\/$/, '')
   return `${origin}/play/${huntInfo.qrSlug}`
+}
+
+function workbookVersionFromInputOrHuntInfo(input: ImportWorkbookInput, huntInfo: HuntInfo) {
+  const inputVersion = cleanText(input.workbookVersion)
+
+  if (inputVersion) return inputVersion
+
+  const huntInfoRecord = huntInfo as HuntInfo & {
+    workbookVersion?: string | null
+  }
+
+  return cleanText(huntInfoRecord.workbookVersion) || DEFAULT_WORKBOOK_VERSION
 }
 
 function normalizeHuntInfoForRpc(huntInfo: HuntInfo, totalPoints: number, questionCount: number, siteOrigin: string) {
@@ -180,7 +206,7 @@ function buildRpcPayload(input: ImportWorkbookInput): RpcImportPayload {
 
   const siteOrigin = input.siteOrigin || DEFAULT_SITE_ORIGIN
   const batchNumber = input.batchNumber || makeImportBatchNumber()
-  const workbookVersion = input.workbookVersion || DEFAULT_WORKBOOK_VERSION
+  const workbookVersion = workbookVersionFromInputOrHuntInfo(input, huntInfo)
   const importerVersion = input.importerVersion || DEFAULT_IMPORTER_VERSION
   const importMode = huntInfo.gameStatus === 'scheduled' ? 'scheduled' : 'draft'
 
@@ -236,30 +262,10 @@ function normalizeRpcResult(data: unknown, fallbackPayload: RpcImportPayload): I
   }
 }
 
-export async function importWorkbook(input: ImportWorkbookInput): Promise<ImportWorkbookResult> {
-  const payload = buildRpcPayload(input)
-
-  // Atomicity requirement:
-  // This intentionally delegates all writes to one PostgreSQL RPC.
-  // Do not replace this with independent client-side insert/update calls.
-  // Multiple Supabase client calls cannot guarantee a transaction across:
-  // Import Batch -> Campaign -> Venue -> Game -> Questions.
-  const { data, error } = await supabase.rpc('import_engineering_workbook', {
-    payload,
-  })
-
-  if (error) {
-    const missingRpc = error.message?.includes('import_engineering_workbook') || error.code === 'PGRST202'
-    if (missingRpc) {
-      throw new Error(
-        'Database RPC import_engineering_workbook is not installed. Add the transactional import SQL migration before enabling game imports.'
-      )
-    }
-
-    throw new Error(error.message || 'Import failed.')
-  }
-
-  return normalizeRpcResult(data, payload)
+export async function importWorkbook(_input: ImportWorkbookInput): Promise<ImportWorkbookResult> {
+  throw new Error(
+    'Direct workbook RPC execution is disabled. Use the protected /api/admin/import route so the import runs server-side with the service-role client.'
+  )
 }
 
 export function buildImportPreviewPayload(input: ImportWorkbookInput) {
