@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
-import { importWorkbook } from '@/lib/importer/importWorkbook'
 import { validateWorkbook } from '@/lib/importer/validateWorkbook'
 import type { ImportIssue, ValidatedWorkbook, WorkbookSheets } from '@/lib/importer/types'
-import type { ImportWorkbookResult } from '@/lib/importer/importWorkbook'
+import type { ImportWorkbookInput, ImportWorkbookResult } from '@/lib/importer/importWorkbook'
 
 function rowsFromSheet(workbook: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] {
   const sheet = workbook.Sheets[sheetName]
@@ -64,6 +63,7 @@ export default function AdminImportPage() {
   const [importResult, setImportResult] = useState<ImportWorkbookResult | null>(null)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
+  const [adminToken, setAdminToken] = useState('')
 
   async function handleFile(file?: File) {
     if (!file) return
@@ -107,6 +107,12 @@ export default function AdminImportPage() {
     setCreatedBatchNumber('')
     setImportResult(null)
 
+    if (!adminToken.trim()) {
+      setMessage('Enter the admin import token before running the atomic game import.')
+      setWorking(false)
+      return
+    }
+
     if (!validated.summary.canImport || validated.errors.length > 0) {
       setMessage('Blocking errors found. Fix the workbook before running the atomic game import.')
       setWorking(false)
@@ -115,18 +121,41 @@ export default function AdminImportPage() {
 
     const batchNumber = makeBatchNumber()
 
+    const requestBody: ImportWorkbookInput = {
+      validated,
+      parsedSheets,
+      workbookName: fileName,
+      fileChecksum,
+      batchNumber,
+      workbookVersion: 'Engineering Workbook v1',
+      importerVersion: 'RC1.4-importer-0.1',
+      createdBy: 'admin/import',
+      siteOrigin: 'https://play.historyhuntgames.com',
+    }
+
     try {
-      const result = await importWorkbook({
-        validated,
-        parsedSheets,
-        workbookName: fileName,
-        fileChecksum,
-        batchNumber,
-        workbookVersion: 'Engineering Workbook v1',
-        importerVersion: 'RC1.4-importer-0.1',
-        createdBy: 'admin/import',
-        siteOrigin: 'https://play.historyhuntgames.com',
+      const response = await fetch('/api/admin/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-import-token': adminToken.trim(),
+        },
+        body: JSON.stringify(requestBody),
       })
+
+      const responseBody = await response.json().catch(() => ({})) as Partial<ImportWorkbookResult> & {
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(responseBody.error || `Import failed with status ${response.status}.`)
+      }
+
+      const result = responseBody as ImportWorkbookResult
+
+      if (!result.batchNumber) {
+        throw new Error('Import API returned an invalid response.')
+      }
 
       setCreatedBatchNumber(result.batchNumber)
       setImportResult(result)
@@ -154,6 +183,24 @@ export default function AdminImportPage() {
           <p className="mt-3 text-gray-600">
             Upload an Engineering Workbook, validate Hunt Info and Questions, preview issues, and run the atomic game import.
           </p>
+          <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 p-4">
+            <label className="block text-sm font-bold uppercase tracking-wide text-orange-900">
+              Admin Import Token
+            </label>
+            <input
+              type="password"
+              value={adminToken}
+              disabled={working}
+              onChange={event => setAdminToken(event.target.value)}
+              className="mt-2 block w-full rounded-xl border bg-white p-3"
+              placeholder="Enter Dev-Test import token"
+              autoComplete="off"
+            />
+            <p className="mt-2 text-sm text-orange-900">
+              Required for server-side imports. This keeps the service-role importer route from being open to the public.
+            </p>
+          </div>
+
 
           <div className="mt-6 rounded-2xl border border-dashed border-blue-300 bg-blue-50 p-6">
             <label className="block text-lg font-bold text-blue-900">
@@ -265,7 +312,7 @@ export default function AdminImportPage() {
             </div>
 
             <button
-              disabled={working || !validated.summary.canImport}
+              disabled={working || !validated.summary.canImport || !adminToken.trim()}
               onClick={createImportBatch}
               className="mt-6 rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
             >
