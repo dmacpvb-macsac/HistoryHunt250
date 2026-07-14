@@ -26,6 +26,47 @@ async function sha256(file: File) {
     .join('')
 }
 
+type ImportNotice =
+  | {
+      kind: 'info'
+      title: string
+      message: string
+    }
+  | {
+      kind: 'success'
+      title: string
+      result: ImportWorkbookResult
+    }
+  | {
+      kind: 'error'
+      title: string
+      message: string
+      statusCode?: number
+      detail?: string
+    }
+
+function valueToString(value: unknown) {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return ''
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+async function readResponseBody(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text()
+  if (!text.trim()) return {}
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return { error: text }
+  }
+}
+
 function IssueList({ title, issues }: { title: string; issues: ImportIssue[] }) {
   if (issues.length === 0) return null
 
@@ -54,26 +95,145 @@ function IssueList({ title, issues }: { title: string; issues: ImportIssue[] }) 
   )
 }
 
+function ImportNoticePanel({ notice }: { notice: ImportNotice | null }) {
+  if (!notice) return null
+
+  if (notice.kind === 'success') {
+    const { result } = notice
+
+    return (
+      <div className="mt-6 rounded-2xl border border-green-300 bg-green-50 p-5 text-green-950 shadow-sm">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">Import Complete</p>
+            <h2 className="mt-1 text-2xl font-bold">{notice.title}</h2>
+          </div>
+          <div className="rounded-full bg-green-700 px-4 py-2 text-sm font-bold text-white">
+            200 OK
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">Batch Number</p>
+            <p className="break-all font-bold">{result.batchNumber}</p>
+          </div>
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">Game Slug</p>
+            <p className="break-all font-bold">{result.gameSlug}</p>
+          </div>
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">QR Slug</p>
+            <p className="break-all font-bold">{result.qrSlug}</p>
+          </div>
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">Questions Imported</p>
+            <p className="font-bold">{result.questionsImported}</p>
+          </div>
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">Total Points</p>
+            <p className="font-bold">{result.totalPoints}</p>
+          </div>
+          <div className="rounded-xl bg-white p-4">
+            <p className="text-sm text-green-700">Warnings</p>
+            <p className="font-bold">{result.warningsCount}</p>
+          </div>
+        </div>
+
+        {result.publicPlayUrl && (
+          <div className="mt-5 rounded-xl bg-white p-4">
+            <p className="font-bold">Playable URL</p>
+            <a
+              href={result.publicPlayUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 block break-all underline"
+            >
+              {result.publicPlayUrl}
+            </a>
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-2 text-sm md:grid-cols-3">
+          <div>
+            <span className="font-bold">Campaign ID:</span>
+            <br />
+            <span className="break-all">{result.campaignId}</span>
+          </div>
+          <div>
+            <span className="font-bold">Venue ID:</span>
+            <br />
+            <span className="break-all">{result.venueId}</span>
+          </div>
+          <div>
+            <span className="font-bold">Game ID:</span>
+            <br />
+            <span className="break-all">{result.gameId}</span>
+          </div>
+        </div>
+
+        <p className="mt-5 rounded-xl border border-green-200 bg-white p-3 text-sm font-semibold text-green-900">
+          Do not run the importer again unless you are intentionally testing a re-import of this workbook.
+        </p>
+      </div>
+    )
+  }
+
+  if (notice.kind === 'error') {
+    return (
+      <div className="mt-6 rounded-2xl border border-red-300 bg-red-50 p-5 text-red-950 shadow-sm">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-red-700">Import Failed</p>
+            <h2 className="mt-1 text-2xl font-bold">{notice.title}</h2>
+          </div>
+          {notice.statusCode && (
+            <div className="rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white">
+              HTTP {notice.statusCode}
+            </div>
+          )}
+        </div>
+
+        <p className="mt-4 font-semibold">{notice.message}</p>
+
+        {notice.detail && (
+          <pre className="mt-4 overflow-x-auto rounded-xl bg-white p-4 text-sm text-red-950">
+            {notice.detail}
+          </pre>
+        )}
+
+        <p className="mt-4 rounded-xl border border-red-200 bg-white p-3 text-sm font-semibold text-red-900">
+          No success was confirmed. Do not click again until this error is reviewed.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-blue-950 shadow-sm">
+      <p className="text-sm font-bold uppercase tracking-wide text-blue-700">Admin Notice</p>
+      <h2 className="mt-1 text-xl font-bold">{notice.title}</h2>
+      <p className="mt-2 font-semibold">{notice.message}</p>
+    </div>
+  )
+}
+
 export default function AdminImportPage() {
   const [fileName, setFileName] = useState('')
   const [fileChecksum, setFileChecksum] = useState('')
   const [validated, setValidated] = useState<ValidatedWorkbook | null>(null)
   const [parsedSheets, setParsedSheets] = useState<WorkbookSheets | null>(null)
-  const [createdBatchNumber, setCreatedBatchNumber] = useState('')
-  const [importResult, setImportResult] = useState<ImportWorkbookResult | null>(null)
   const [working, setWorking] = useState(false)
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState<ImportNotice | null>(null)
   const [adminToken, setAdminToken] = useState('')
 
   async function handleFile(file?: File) {
     if (!file) return
 
     setWorking(true)
-    setMessage('')
+    setNotice(null)
     setValidated(null)
     setParsedSheets(null)
-    setCreatedBatchNumber('')
-    setImportResult(null)
     setFileName(file.name)
 
     try {
@@ -93,28 +253,45 @@ export default function AdminImportPage() {
       setValidated(result)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to parse workbook.'
-      setMessage(message)
+      setNotice({
+        kind: 'error',
+        title: 'Workbook Parse Failed',
+        message,
+      })
     } finally {
       setWorking(false)
     }
   }
 
   async function createImportBatch() {
-    if (!validated || !parsedSheets) return
+    if (!validated || !parsedSheets) {
+      setNotice({
+        kind: 'error',
+        title: 'Import Not Ready',
+        message: 'Upload and validate an Engineering Workbook before running the atomic game import.',
+      })
+      return
+    }
 
     setWorking(true)
-    setMessage('')
-    setCreatedBatchNumber('')
-    setImportResult(null)
+    setNotice(null)
 
     if (!adminToken.trim()) {
-      setMessage('Enter the admin import token before running the atomic game import.')
+      setNotice({
+        kind: 'error',
+        title: 'Import Not Ready',
+        message: 'Enter the admin import token before running the atomic game import.',
+      })
       setWorking(false)
       return
     }
 
     if (!validated.summary.canImport || validated.errors.length > 0) {
-      setMessage('Blocking errors found. Fix the workbook before running the atomic game import.')
+      setNotice({
+        kind: 'error',
+        title: 'Workbook Has Blocking Errors',
+        message: 'Fix the workbook errors shown below before running the atomic game import.',
+      })
       setWorking(false)
       return
     }
@@ -143,28 +320,47 @@ export default function AdminImportPage() {
         body: JSON.stringify(requestBody),
       })
 
-      const responseBody = await response.json().catch(() => ({})) as Partial<ImportWorkbookResult> & {
-        error?: string
-      }
+      const responseBody = await readResponseBody(response)
 
       if (!response.ok) {
-        throw new Error(responseBody.error || `Import failed with status ${response.status}.`)
+        const serverError = valueToString(responseBody.error)
+        const serverMessage = valueToString(responseBody.message)
+        const serverDetails = valueToString(responseBody.details)
+
+        setNotice({
+          kind: 'error',
+          title: 'Atomic Game Import Failed',
+          message: serverError || serverMessage || `Import failed with status ${response.status}.`,
+          statusCode: response.status,
+          detail: serverDetails,
+        })
+        return
       }
 
-      const result = responseBody as ImportWorkbookResult
+      const result = responseBody as unknown as ImportWorkbookResult
 
-      if (!result.batchNumber) {
-        throw new Error('Import API returned an invalid response.')
+      if (!result.batchNumber || !result.gameSlug) {
+        setNotice({
+          kind: 'error',
+          title: 'Invalid Import Response',
+          message: 'The server returned 200 OK, but the import response did not include the expected batch number and game slug.',
+          detail: JSON.stringify(responseBody, null, 2),
+        })
+        return
       }
 
-      setCreatedBatchNumber(result.batchNumber)
-      setImportResult(result)
-      setMessage(
-        `Import complete: ${result.batchNumber}. Game "${result.gameSlug}" imported with ${result.questionsImported} questions and ${result.totalPoints} total points.`
-      )
+      setNotice({
+        kind: 'success',
+        title: 'Successful Import',
+        result,
+      })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to run atomic game import.'
-      setMessage(message)
+      setNotice({
+        kind: 'error',
+        title: 'Atomic Game Import Failed',
+        message,
+      })
     } finally {
       setWorking(false)
     }
@@ -183,6 +379,7 @@ export default function AdminImportPage() {
           <p className="mt-3 text-gray-600">
             Upload an Engineering Workbook, validate Hunt Info and Questions, preview issues, and run the atomic game import.
           </p>
+
           <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 p-4">
             <label className="block text-sm font-bold uppercase tracking-wide text-orange-900">
               Admin Import Token
@@ -200,7 +397,6 @@ export default function AdminImportPage() {
               Required for server-side imports. This keeps the service-role importer route from being open to the public.
             </p>
           </div>
-
 
           <div className="mt-6 rounded-2xl border border-dashed border-blue-300 bg-blue-50 p-6">
             <label className="block text-lg font-bold text-blue-900">
@@ -222,46 +418,7 @@ export default function AdminImportPage() {
             <p className="mt-4 font-semibold text-blue-900">Working...</p>
           )}
 
-          {message && (
-            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 font-semibold text-blue-900">
-              {message}
-              {createdBatchNumber && (
-                <div className="mt-2 text-sm font-bold">Batch Number: {createdBatchNumber}</div>
-              )}
-            </div>
-          )}
-
-          {importResult && (
-            <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-900">
-              <p className="font-bold">Playable URL</p>
-              <a
-                href={importResult.publicPlayUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 block break-all underline"
-              >
-                {importResult.publicPlayUrl}
-              </a>
-
-              <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
-                <div>
-                  <span className="font-bold">Campaign ID:</span>
-                  <br />
-                  <span className="break-all">{importResult.campaignId}</span>
-                </div>
-                <div>
-                  <span className="font-bold">Venue ID:</span>
-                  <br />
-                  <span className="break-all">{importResult.venueId}</span>
-                </div>
-                <div>
-                  <span className="font-bold">Game ID:</span>
-                  <br />
-                  <span className="break-all">{importResult.gameId}</span>
-                </div>
-              </div>
-            </div>
-          )}
+          <ImportNoticePanel notice={notice} />
         </div>
 
         {validated && (
@@ -316,7 +473,7 @@ export default function AdminImportPage() {
               onClick={createImportBatch}
               className="mt-6 rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              Run Atomic Game Import
+              {working ? 'Working...' : 'Run Atomic Game Import'}
             </button>
           </div>
         )}
