@@ -108,13 +108,14 @@ export default function PlayPage({
 
       try {
         const playerId = localStorage.getItem('player_id')
+        const anonymousRequested = sessionStorage.getItem(`anonymous_player:${qrSlug}`) === 'true'
 
         const response = await fetch(`/api/play/${encodeURIComponent(qrSlug)}/start`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ playerId }),
+          body: JSON.stringify({ playerId, anonymous: anonymousRequested }),
         })
 
         const body = await response.json().catch(() => ({})) as StartResponse
@@ -122,6 +123,7 @@ export default function PlayPage({
         if (response.status === 401 && body.registrationRequired) {
           localStorage.removeItem('player_id')
           localStorage.removeItem('player_name')
+          sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
           router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
           return
         }
@@ -235,6 +237,8 @@ export default function PlayPage({
       if (!response.ok) {
         throw new Error(body.error || `Unable to complete hunt. Status ${response.status}.`)
       }
+
+      sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
 
       router.push(`/results/${sessionId}`)
     } catch (err: unknown) {

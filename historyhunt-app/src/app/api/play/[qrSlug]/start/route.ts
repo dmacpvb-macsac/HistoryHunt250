@@ -6,6 +6,7 @@ export const runtime = 'nodejs'
 
 type StartRequestBody = {
   playerId?: string | null
+  anonymous?: boolean | null
 }
 
 function normalizeCampaign(value: unknown) {
@@ -55,6 +56,7 @@ function publicGameFields(game: Record<string, unknown>) {
     countdown_enabled: Boolean(game.countdown_enabled),
     leaderboard_enabled: Boolean(game.leaderboard_enabled),
     registration_required: Boolean(game.registration_required),
+    allow_anonymous_players: game.allow_anonymous_players !== false,
     active: Boolean(game.active),
   }
 }
@@ -149,6 +151,7 @@ async function loadHunt(qrSlug: string) {
       countdown_enabled,
       leaderboard_enabled,
       registration_required,
+      allow_anonymous_players,
       active
     `)
     .eq('campaign_id', venueRecord.campaign_id)
@@ -191,6 +194,7 @@ async function loadHunt(qrSlug: string) {
   const { campaigns: _campaigns, ...venueWithoutCampaign } = venueRecord
 
   const registrationRequired = Boolean(gameRecord.registration_required) || Boolean(venueRecord.registration_enabled)
+  const allowAnonymousPlayers = gameRecord.allow_anonymous_players !== false
 
   return {
     venue: publicVenueFields(venueWithoutCampaign),
@@ -199,6 +203,7 @@ async function loadHunt(qrSlug: string) {
     questions: questions.map((question) => sanitizeQuestion(question as Record<string, unknown>)),
     permissions: {
       registrationRequired,
+      allowAnonymousPlayers,
       quizEnabled: venueRecord.quiz_enabled !== false,
       rewardsEnabled: venueRecord.reward_enabled !== false,
     },
@@ -225,9 +230,16 @@ function checkAvailability(game: { status: string; starts_at: string | null; end
   return ''
 }
 
-async function resolvePlayerId(playerId: string | null, registrationRequired: boolean) {
+async function resolvePlayerId(
+  playerId: string | null,
+  registrationRequired: boolean,
+  allowAnonymousPlayers: boolean,
+  anonymousRequested: boolean
+) {
+  const anonymousAllowed = anonymousRequested && allowAnonymousPlayers
+
   if (!playerId) {
-    if (registrationRequired) {
+    if (registrationRequired && !anonymousAllowed) {
       throw new Error('REGISTRATION_REQUIRED')
     }
 
@@ -241,7 +253,7 @@ async function resolvePlayerId(playerId: string | null, registrationRequired: bo
     .maybeSingle()
 
   if (error || !playerExists) {
-    if (registrationRequired) {
+    if (registrationRequired && !anonymousAllowed) {
       throw new Error('REGISTRATION_REQUIRED')
     }
 
@@ -381,9 +393,13 @@ export async function POST(
       )
     }
 
+    const anonymousRequested = body.anonymous === true
+
     const playerId = await resolvePlayerId(
       body.playerId ? String(body.playerId) : null,
-      hunt.permissions.registrationRequired
+      hunt.permissions.registrationRequired,
+      hunt.permissions.allowAnonymousPlayers,
+      anonymousRequested
     )
 
     const sessionId = await startSession(hunt, playerId)
@@ -391,6 +407,7 @@ export async function POST(
     return NextResponse.json({
       sessionId,
       playerId,
+      anonymous: playerId === null,
       hunt,
     })
   } catch (error: unknown) {

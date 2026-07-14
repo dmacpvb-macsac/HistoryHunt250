@@ -206,7 +206,7 @@ export default function ResultsPage({
                 download
                 className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-5 py-3 font-bold text-white"
               >
-                <img src="/icons/actions/download.svg" alt="" className="h-5 w-5" aria-hidden="true" />
+                <img src="/icons/actions/arrow_down_tray.svg" alt="" className="h-5 w-5 brightness-0 invert" aria-hidden="true" />
                 Save Badge
               </a>
             )}
@@ -223,9 +223,10 @@ export default function ResultsPage({
             <button
               type="button"
               onClick={nativeShare}
-              className="mt-5 inline-flex items-center justify-center rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white"
+              className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-6 py-4 text-lg font-bold text-white"
             >
-              Share →
+              <img src="/icons/actions/share.svg" alt="" className="h-5 w-5 brightness-0 invert" aria-hidden="true" />
+              Share
             </button>
           </section>
         )}
