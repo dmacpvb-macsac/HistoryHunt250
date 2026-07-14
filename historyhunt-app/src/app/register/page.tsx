@@ -1,13 +1,20 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+
+type RegistrationConfig = {
+  qrSlug: string
+  venueName: string
+  campaignTitle: string
+  gameTitle: string
+  registrationRequired: boolean
+  allowAnonymousPlayers: boolean
+}
 
 function normalizePhoneDigits(value: string): string {
   let digits = value.replace(/\D/g, '')
 
-  // Handles autofill values like +1 (555) 555-5555
   if (digits.length === 11 && digits.startsWith('1')) {
     digits = digits.slice(1)
   }
@@ -28,6 +35,8 @@ function RegisterForm() {
   const searchParams = useSearchParams()
   const qrSlug = searchParams.get('qrSlug') || searchParams.get('play') || ''
 
+  const [config, setConfig] = useState<RegistrationConfig | null>(null)
+  const [configLoading, setConfigLoading] = useState(true)
   const [form, setForm] = useState({
     first_name: '',
     phone_number: '',
@@ -35,22 +44,66 @@ function RegisterForm() {
     sms_opt_in: false,
     service_affiliation: false,
   })
-
   const [loading, setLoading] = useState(false)
+  const [anonymousLoading, setAnonymousLoading] = useState(false)
   const [error, setError] = useState('')
 
   const phoneDigits = normalizePhoneDigits(form.phone_number)
-  const countryCode = '+1'
-  const countryIso = 'US'
-  const phoneE164 = phoneDigits.length === 10 ? `${countryCode}${phoneDigits}` : null
 
   const canStart =
     form.first_name.trim().length > 0 &&
     phoneDigits.length === 10 &&
-    !loading
+    !loading &&
+    !anonymousLoading
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadConfig() {
+      if (!qrSlug) {
+        if (!cancelled) {
+          setConfigLoading(false)
+          setError('Missing game link. Please scan the QR code again.')
+        }
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/register?qrSlug=${encodeURIComponent(qrSlug)}`, {
+          cache: 'no-store',
+        })
+
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to load registration settings.')
+        }
+
+        if (!cancelled) {
+          setConfig(payload.config || null)
+          setConfigLoading(false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unable to load registration settings.')
+          setConfigLoading(false)
+        }
+      }
+    }
+
+    loadConfig()
+
+    return () => {
+      cancelled = true
+    }
+  }, [qrSlug])
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, phone_number: formatPhone(e.target.value) })
+  }
+
+  const goToGame = () => {
+    router.push(qrSlug ? `/play/${encodeURIComponent(qrSlug)}` : '/')
   }
 
   const handleSubmit = async () => {
@@ -62,78 +115,73 @@ function RegisterForm() {
     setLoading(true)
     setError('')
 
-    const { data: existingPlayer, error: lookupError } = await supabase
-      .from('players')
-      .select('player_id, first_name')
-      .eq('phone_number', phoneDigits)
-      .maybeSingle()
+    try {
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'registered',
+          qrSlug,
+          firstName: form.first_name,
+          phoneNumber: phoneDigits,
+          email: form.email,
+          smsOptIn: form.sms_opt_in,
+          serviceAffiliation: form.service_affiliation,
+        }),
+      })
 
-    if (lookupError) {
-      setError(lookupError.message)
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to register player.')
+      }
+
+      localStorage.setItem('player_id', payload.player.playerId)
+      localStorage.setItem('player_name', payload.player.firstName)
+      localStorage.setItem('qr_slug', qrSlug)
+      sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
+
+      goToGame()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to register player.')
       setLoading(false)
-      return
     }
+  }
 
-    let playerId = existingPlayer?.player_id
-    let playerName = existingPlayer?.first_name || form.first_name.trim()
+  const handleAnonymous = async () => {
+    setAnonymousLoading(true)
+    setError('')
 
-    if (playerId) {
-      const { error: updateError } = await supabase
-        .from('players')
-        .update({
-          first_name: form.first_name.trim(),
-          country_code: countryCode,
-          country_iso: countryIso,
-          phone_e164: phoneE164,
-          email: form.email.trim() || null,
-          sms_opt_in: form.sms_opt_in,
-          service_affiliation: form.service_affiliation,
-          terms_accepted: true,
-          privacy_accepted: true,
-        })
-        .eq('player_id', playerId)
+    try {
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'anonymous',
+          qrSlug,
+        }),
+      })
 
-      if (updateError) {
-        setError(updateError.message)
-        setLoading(false)
-        return
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Anonymous play is not available for this game.')
       }
 
-      playerName = form.first_name.trim()
-    } else {
-      const { data, error: dbError } = await supabase
-        .from('players')
-        .insert([{
-          first_name: form.first_name.trim(),
-          phone_number: phoneDigits,
-          country_code: countryCode,
-          country_iso: countryIso,
-          phone_e164: phoneE164,
-          email: form.email.trim() || null,
-          sms_opt_in: form.sms_opt_in,
-          service_affiliation: form.service_affiliation,
-          terms_accepted: true,
-          privacy_accepted: true,
-          source: 'qr',
-        }])
-        .select()
-        .single()
+      localStorage.removeItem('player_id')
+      localStorage.removeItem('player_name')
+      localStorage.setItem('qr_slug', qrSlug)
+      sessionStorage.setItem(`anonymous_player:${qrSlug}`, 'true')
 
-      if (dbError) {
-        setError(dbError.message)
-        setLoading(false)
-        return
-      }
-
-      playerId = data.player_id
-      playerName = data.first_name
+      goToGame()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Anonymous play is not available for this game.')
+      setAnonymousLoading(false)
     }
-
-    localStorage.setItem('player_id', playerId)
-    localStorage.setItem('player_name', playerName)
-    localStorage.setItem('qr_slug', qrSlug)
-
-    router.push(qrSlug ? `/play/${encodeURIComponent(qrSlug)}` : '/')
   }
 
   return (
@@ -146,18 +194,50 @@ function RegisterForm() {
             className="w-40 mx-auto mb-4"
           />
 
-          <h1 className="text-2xl font-bold text-blue-900">
-            History Hunt™
-          </h1>
-
           <p className="text-gray-500 text-sm mt-1">
             Presented by America 250 Proof™
           </p>
 
+          {config?.gameTitle ? (
+            <p className="text-gray-700 font-semibold mt-3">
+              {config.gameTitle}
+            </p>
+          ) : null}
+
           <p className="text-gray-600 mt-3">
-            Enter your info to start the challenge.
+            Choose anonymous play, or register to save your game history.
           </p>
         </div>
+
+        {config?.allowAnonymousPlayers && (
+          <div className="mb-5">
+            <button
+              onClick={handleAnonymous}
+              disabled={anonymousLoading || loading || configLoading}
+              className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-lg font-bold transition-colors"
+            >
+              {anonymousLoading ? 'Starting Anonymous Play...' : 'Play Anonymously'}
+            </button>
+
+            <p className="text-center text-xs text-gray-500 mt-2">
+              No game history is captured in anonymous mode.
+            </p>
+
+            <div className="flex items-center gap-3 mt-5">
+              <div className="h-px bg-gray-200 flex-1" />
+              <span className="text-xs uppercase tracking-wide text-gray-400 font-semibold">
+                Or register
+              </span>
+              <div className="h-px bg-gray-200 flex-1" />
+            </div>
+          </div>
+        )}
+
+        {configLoading && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm">
+            Loading registration settings...
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 mb-4 text-sm">
@@ -262,7 +342,7 @@ function RegisterForm() {
 
         <button
           onClick={handleSubmit}
-          disabled={!canStart}
+          disabled={!canStart || configLoading}
           className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-xl font-bold transition-colors"
         >
           {loading ? 'Starting...' : 'Agree & Play →'}
@@ -279,7 +359,7 @@ function RegisterForm() {
           </a>
           . No purchase necessary. See{' '}
           <a href="/legal/contest-rules" target="_blank" className="underline">
-            Contest Rules 
+            Contest Rules
           </a>
           .
         </p>
