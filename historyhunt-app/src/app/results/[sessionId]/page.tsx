@@ -3,7 +3,45 @@
 import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import ShareBar from '@/components/share/ShareBar'
-import { supabase } from '@/lib/supabase'
+
+type ResultsResponse = {
+  session: {
+    session_id: string
+    score: number
+    total_points: number
+    completed: boolean
+    completed_at: string | null
+  }
+  player: {
+    first_name: string
+  } | null
+  game: {
+    game_id: string
+    slug: string
+    title: string
+    participant_badge_url: string
+    perfect_score_badge_url: string
+    share_url: string
+    public_play_url: string
+    share_title: string
+    share_text: string
+    badge_share_enabled: boolean
+    badge_download_enabled: boolean
+  }
+  venue: {
+    venue_id: string
+    name: string
+    city: string
+    state: string
+    qr_slug: string
+  } | null
+  campaign: {
+    campaign_id: string
+    slug: string
+    title: string
+  } | null
+  error?: string
+}
 
 export default function ResultsPage({
   params,
@@ -15,44 +53,35 @@ export default function ResultsPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [nativeShareSupported, setNativeShareSupported] = useState(false)
-
-  const [session, setSession] = useState<any>(null)
-  const [player, setPlayer] = useState<any>(null)
-  const [game, setGame] = useState<any>(null)
-  const [venue, setVenue] = useState<any>(null)
-  const [campaign, setCampaign] = useState<any>(null)
+  const [results, setResults] = useState<ResultsResponse | null>(null)
 
   useEffect(() => {
     async function loadResults() {
       setLoading(true)
       setError('')
 
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('session_id', sessionId)
-        .single()
+      try {
+        const response = await fetch(`/api/results/${encodeURIComponent(sessionId)}`, {
+          cache: 'no-store',
+        })
 
-      if (sessionError || !sessionData) {
-        setError('Results not found.')
+        const body = await response.json().catch(() => ({})) as ResultsResponse
+
+        if (!response.ok) {
+          throw new Error(body.error || `Unable to load results. Status ${response.status}.`)
+        }
+
+        if (!body.session || !body.game) {
+          throw new Error('Results API returned an invalid response.')
+        }
+
+        setResults(body)
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unable to load this result.'
+        setError(message)
+      } finally {
         setLoading(false)
-        return
       }
-
-      const [{ data: playerData }, { data: gameData }, { data: venueData }, { data: campaignData }] =
-        await Promise.all([
-          supabase.from('players').select('*').eq('player_id', sessionData.player_id).maybeSingle(),
-          supabase.from('games').select('*').eq('game_id', sessionData.game_id).maybeSingle(),
-          supabase.from('venues').select('*').eq('venue_id', sessionData.venue_id).maybeSingle(),
-          supabase.from('campaigns').select('*').eq('campaign_id', sessionData.campaign_id).maybeSingle(),
-        ])
-
-      setSession(sessionData)
-      setPlayer(playerData)
-      setGame(gameData)
-      setVenue(venueData)
-      setCampaign(campaignData)
-      setLoading(false)
     }
 
     loadResults()
@@ -64,6 +93,12 @@ export default function ResultsPage({
         typeof navigator.share === 'function'
     )
   }, [])
+
+  const session = results?.session || null
+  const player = results?.player || null
+  const game = results?.game || null
+  const venue = results?.venue || null
+  const campaign = results?.campaign || null
 
   const isPerfect = session && Number(session.score) >= Number(session.total_points)
 

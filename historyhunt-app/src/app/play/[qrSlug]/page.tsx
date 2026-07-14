@@ -1,9 +1,84 @@
 'use client'
 
-import { use, useEffect, useRef, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { resolveGameFromQr } from '@/lib/gameLoader'
-import { supabase } from '@/lib/supabase'
+
+type HuntQuestion = {
+  question_id: string
+  sort_order: number
+  lyric: string
+  lyric_prompt: string
+  question_text: string
+  choice_a: string
+  choice_b: string
+  choice_c: string
+  choice_d: string
+  category: string
+  difficulty: string
+  is_bonus: boolean
+  active: boolean
+}
+
+type HuntData = {
+  qrSlug?: string
+  venue: {
+    venue_id: string
+    name: string
+    city: string
+    state: string
+    qr_slug: string
+  }
+  campaign: {
+    campaign_id: string
+    slug: string
+    title: string
+  } | null
+  game: {
+    game_id: string
+    slug: string
+    title: string
+    total_points: number
+    status: string
+    starts_at: string | null
+    ends_at: string | null
+    registration_required: boolean
+  }
+  questions: HuntQuestion[]
+  permissions: {
+    registrationRequired: boolean
+    quizEnabled: boolean
+    rewardsEnabled: boolean
+  }
+}
+
+type StartResponse = {
+  sessionId?: string
+  playerId?: string | null
+  hunt?: HuntData
+  blockedMessage?: string
+  error?: string
+  registrationRequired?: boolean
+}
+
+type AnswerFeedback = {
+  alreadyRecorded?: boolean
+  selectedAnswer: string
+  correct: boolean
+  pointsAwarded: number
+  correctAnswer: string
+  currentScore: number
+  educationalFact: string
+  lyricMeaning: string
+  youtubePrompt: string
+}
+
+type CompleteResponse = {
+  sessionId?: string
+  score?: number
+  totalPoints?: number
+  completed?: boolean
+  error?: string
+}
 
 export default function PlayPage({
   params,
@@ -13,17 +88,17 @@ export default function PlayPage({
   const { qrSlug } = use(params)
   const router = useRouter()
 
-  const [hunt, setHunt] = useState<any>(null)
+  const [hunt, setHunt] = useState<HuntData | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [questionIndex, setQuestionIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
-  const [answerWasCorrect, setAnswerWasCorrect] = useState<boolean | null>(null)
+  const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback | null>(null)
   const [score, setScore] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [savingAnswer, setSavingAnswer] = useState(false)
+  const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState('')
   const [blockedMessage, setBlockedMessage] = useState('')
-
-  const scoreRef = useRef(0)
 
   useEffect(() => {
     async function bootGame() {
@@ -32,123 +107,49 @@ export default function PlayPage({
       setBlockedMessage('')
 
       try {
-        const huntData = await resolveGameFromQr(qrSlug)
-        const game = huntData.game
-
-        const now = new Date()
-        const startsAt = game.starts_at ? new Date(game.starts_at) : null
-        const endsAt = game.ends_at ? new Date(game.ends_at) : null
-
-        if (game.status === 'draft' || game.status === 'archived') {
-          setBlockedMessage('This History Hunt is not currently available.')
-          setHunt(huntData)
-          setLoading(false)
-          return
-        }
-
-        if (startsAt && now < startsAt) {
-          setBlockedMessage('This History Hunt has not started yet. Check back when the hunt begins!')
-          setHunt(huntData)
-          setLoading(false)
-          return
-        }
-
-        if (endsAt && now > endsAt) {
-          setBlockedMessage('This History Hunt has ended.')
-          setHunt(huntData)
-          setLoading(false)
-          return
-        }
-
         const playerId = localStorage.getItem('player_id')
 
-        if (!playerId) {
-          router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
-          return
-        }
+        const response = await fetch(`/api/play/${encodeURIComponent(qrSlug)}/start`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerId }),
+        })
 
-        const { data: playerExists } = await supabase
-          .from('players')
-          .select('player_id')
-          .eq('player_id', playerId)
-          .maybeSingle()
+        const body = await response.json().catch(() => ({})) as StartResponse
 
-        if (!playerExists) {
+        if (response.status === 401 && body.registrationRequired) {
           localStorage.removeItem('player_id')
           localStorage.removeItem('player_name')
           router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
           return
         }
 
-        const { data: existingSession } = await supabase
-          .from('sessions')
-          .select('session_id')
-          .eq('player_id', playerId)
-          .eq('game_id', game.game_id)
-          .eq('completed', false)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-
-        let activeSessionId = existingSession?.session_id
-
-        if (activeSessionId) {
-          const { error: resetSessionError } = await supabase
-            .from('sessions')
-            .update({
-              score: 0,
-              completed: false,
-              completed_at: null,
-            })
-            .eq('session_id', activeSessionId)
-
-          if (resetSessionError) {
-            console.error('SESSION RESET ERROR', resetSessionError)
-            throw new Error(resetSessionError.message || 'Unable to reset existing game session.')
+        if (!response.ok) {
+          if (body.hunt) {
+            setHunt(body.hunt)
           }
 
-          const { error: cleanupResponsesError } = await supabase
-            .from('responses')
-            .delete()
-            .eq('session_id', activeSessionId)
-
-          if (cleanupResponsesError) {
-            console.error('RESPONSE CLEANUP ERROR', cleanupResponsesError)
-            throw new Error(cleanupResponsesError.message || 'Unable to reset existing answers.')
-          }
-        } else {
-          const { data: newSession, error: sessionError } = await supabase
-            .from('sessions')
-            .insert({
-              player_id: playerId,
-              campaign_id: huntData.campaign.campaign_id,
-              venue_id: huntData.venue.venue_id,
-              game_id: game.game_id,
-              score: 0,
-              total_points: game.total_points || 0,
-              completed: false,
-            })
-            .select('session_id')
-            .single()
-
-          if (sessionError || !newSession) {
-            console.error('SESSION INSERT ERROR', sessionError)
-            throw new Error(sessionError?.message || 'Unable to start game session.')
-          }
-
-          activeSessionId = newSession.session_id
+          setBlockedMessage(body.blockedMessage || body.error || 'This History Hunt is not currently available.')
+          setLoading(false)
+          return
         }
 
-        setHunt(huntData)
-        setSessionId(activeSessionId)
+        if (!body.hunt || !body.sessionId) {
+          throw new Error('Start API returned an invalid response.')
+        }
+
+        setHunt(body.hunt)
+        setSessionId(body.sessionId)
         setQuestionIndex(0)
         setSelectedAnswer(null)
-        setAnswerWasCorrect(null)
+        setAnswerFeedback(null)
         setScore(0)
-        scoreRef.current = 0
         setLoading(false)
-      } catch (err: any) {
-        setError(err?.message || 'Unable to load this History Hunt.')
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unable to load this History Hunt.'
+        setError(message)
         setLoading(false)
       }
     }
@@ -157,99 +158,104 @@ export default function PlayPage({
   }, [qrSlug, router])
 
   async function chooseAnswer(choice: 'A' | 'B' | 'C' | 'D') {
-    if (!hunt || !sessionId || selectedAnswer) return
-
-    const playerId = localStorage.getItem('player_id')
-
-    if (!playerId) {
-      router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
-      return
-    }
+    if (!hunt || !sessionId || selectedAnswer || savingAnswer) return
 
     const question = hunt.questions[questionIndex]
-    const correct = choice === question.correct_answer
-    const pointsAwarded = correct ? question.points || 1 : 0
 
     setSelectedAnswer(choice)
-    setAnswerWasCorrect(correct)
+    setSavingAnswer(true)
+    setError('')
 
-    if (correct) {
-      scoreRef.current += pointsAwarded
-      setScore(scoreRef.current)
-    }
-
-    const { error: existingResponseDeleteError } = await supabase
-      .from('responses')
-      .delete()
-      .eq('session_id', sessionId)
-      .eq('question_id', question.question_id)
-
-    if (existingResponseDeleteError) {
-      console.error('EXISTING RESPONSE DELETE ERROR', existingResponseDeleteError)
-      setError(existingResponseDeleteError.message || 'Unable to reset this answer. Please try again.')
-      return
-    }
-
-    const { error: responseError } = await supabase
-      .from('responses')
-      .insert({
-        session_id: sessionId,
-        player_id: playerId,
-        game_id: hunt.game.game_id,
-        question_id: question.question_id,
-        selected_answer: choice,
-        correct,
-        points_awarded: pointsAwarded,
+    try {
+      const response = await fetch('/api/play/answer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          questionId: question.question_id,
+          selectedAnswer: choice,
+        }),
       })
 
-    if (responseError) {
-      console.error('RESPONSE INSERT ERROR', responseError)
-      setError(responseError.message || 'Unable to save your answer. Please try again.')
+      const body = await response.json().catch(() => ({})) as Partial<AnswerFeedback> & {
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(body.error || `Unable to save answer. Status ${response.status}.`)
+      }
+
+      if (!body.selectedAnswer || typeof body.correct !== 'boolean') {
+        throw new Error('Answer API returned an invalid response.')
+      }
+
+      const feedback = body as AnswerFeedback
+
+      setAnswerFeedback(feedback)
+      setScore(Number(feedback.currentScore || 0))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to save your answer. Please try again.'
+      setSelectedAnswer(null)
+      setAnswerFeedback(null)
+      setError(message)
+    } finally {
+      setSavingAnswer(false)
     }
   }
 
   async function nextQuestion() {
-    if (!hunt || !sessionId) return
+    if (!hunt || !sessionId || finishing) return
 
     const isLastQuestion = questionIndex >= hunt.questions.length - 1
 
     if (!isLastQuestion) {
       setQuestionIndex(questionIndex + 1)
       setSelectedAnswer(null)
-      setAnswerWasCorrect(null)
+      setAnswerFeedback(null)
+      setError('')
       return
     }
 
-    const { error: completeError } = await supabase
-      .from('sessions')
-      .update({
-        score: scoreRef.current,
-        total_points: hunt.game.total_points || scoreRef.current,
-        completed: true,
-        completed_at: new Date().toISOString(),
+    setFinishing(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/play/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId }),
       })
-      .eq('session_id', sessionId)
 
-    if (completeError) {
-      setError('Unable to save your final score. Please try again.')
-      return
+      const body = await response.json().catch(() => ({})) as CompleteResponse
+
+      if (!response.ok) {
+        throw new Error(body.error || `Unable to complete hunt. Status ${response.status}.`)
+      }
+
+      router.push(`/results/${sessionId}`)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to save your final score. Please try again.'
+      setError(message)
+      setFinishing(false)
     }
-
-    router.push(`/results/${sessionId}`)
   }
 
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
-        <p className="text-blue-900 font-bold">Loading History Hunt...</p>
+        <p className="font-bold text-blue-900">Loading History Hunt...</p>
       </main>
     )
   }
 
-  if (error) {
+  if (error && !hunt) {
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
-        <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
+        <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-xl">
           <h1 className="text-2xl font-bold text-red-700">Unable to Load Hunt</h1>
           <p className="mt-3 text-gray-700">{error}</p>
         </div>
@@ -260,7 +266,7 @@ export default function PlayPage({
   if (blockedMessage) {
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
-        <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
+        <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-xl">
           <h1 className="text-2xl font-bold text-blue-900">
             {hunt?.game?.title || 'History Hunt™'}
           </h1>
@@ -280,7 +286,7 @@ export default function PlayPage({
   if (!hunt || !sessionId) {
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
-        <p className="text-red-700 font-bold">History Hunt unavailable.</p>
+        <p className="font-bold text-red-700">History Hunt unavailable.</p>
       </main>
     )
   }
@@ -297,12 +303,12 @@ export default function PlayPage({
 
   return (
     <main className="min-h-screen bg-slate-100 p-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl p-6">
-        <p className="text-center text-2x1 font-bold text-red-700 tracking-wide">
+      <div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
+        <p className="text-center text-sm font-bold tracking-wide text-red-700">
           {hunt.campaign?.title || 'History Hunt™'}
         </p>
 
-        <h1 className="text-center text-2xl font-bold text-blue-900 mt-1">
+        <h1 className="mt-1 text-center text-2xl font-bold text-blue-900">
           {hunt.game.title}
         </h1>
 
@@ -316,7 +322,7 @@ export default function PlayPage({
         </div>
 
         {question.lyric && (
-          <div className="mt-5 bg-blue-50 border border-blue-200 rounded-2xl p-4">
+          <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm font-bold text-blue-900">Lyric Clue</p>
             <p className="mt-1 text-gray-800 italic">“{question.lyric}”</p>
           </div>
@@ -329,26 +335,26 @@ export default function PlayPage({
         <div className="mt-5 space-y-3">
           {choices.map((choice) => {
             const isSelected = selectedAnswer === choice.key
-            const isCorrectChoice = question.correct_answer === choice.key
+            const isCorrectChoice = answerFeedback?.correctAnswer === choice.key
 
             let buttonClass =
-              'w-full text-left rounded-xl p-4 font-bold border transition '
+              'w-full rounded-xl border p-4 text-left font-bold transition '
 
             if (!selectedAnswer) {
-              buttonClass += 'bg-white border-slate-300 hover:bg-blue-50 text-slate-900'
+              buttonClass += 'border-slate-300 bg-white text-slate-900 hover:bg-blue-50'
             } else if (isCorrectChoice) {
-              buttonClass += 'bg-green-100 border-green-600 text-green-900'
-            } else if (isSelected && !isCorrectChoice) {
-              buttonClass += 'bg-red-100 border-red-600 text-red-900'
+              buttonClass += 'border-green-600 bg-green-100 text-green-900'
+            } else if (isSelected && !isCorrectChoice && answerFeedback) {
+              buttonClass += 'border-red-600 bg-red-100 text-red-900'
             } else {
-              buttonClass += 'bg-slate-100 border-slate-300 text-slate-600'
+              buttonClass += 'border-slate-300 bg-slate-100 text-slate-600'
             }
 
             return (
               <button
                 key={choice.key}
                 onClick={() => chooseAnswer(choice.key)}
-                disabled={!!selectedAnswer}
+                disabled={!!selectedAnswer || savingAnswer}
                 className={buttonClass}
               >
                 <span className="mr-2">{choice.key}.</span>
@@ -358,43 +364,60 @@ export default function PlayPage({
           })}
         </div>
 
+        {error && (
+          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
         {selectedAnswer && (
-          <section className="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <p
-              className={`font-bold ${
-                answerWasCorrect ? 'text-green-800' : 'text-red-800'
-              }`}
-            >
-              {answerWasCorrect ? 'Correct!' : 'Not quite.'}
-            </p>
-
-            {question.educational_fact && (
-              <p className="mt-3 text-gray-800">
-                {question.educational_fact}
-              </p>
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            {!answerFeedback && (
+              <p className="font-bold text-blue-900">Saving answer...</p>
             )}
 
-            {question.lyric_meaning && (
-              <p className="mt-3 text-gray-700">
-                <span className="font-bold">Meaning: </span>
-                {question.lyric_meaning}
-              </p>
-            )}
+            {answerFeedback && (
+              <>
+                <p
+                  className={`font-bold ${
+                    answerFeedback.correct ? 'text-green-800' : 'text-red-800'
+                  }`}
+                >
+                  {answerFeedback.correct ? 'Correct!' : 'Not quite.'}
+                </p>
 
-            {question.youtube_prompt && (
-              <p className="mt-3 text-gray-700">
-                {question.youtube_prompt}
-              </p>
-            )}
+                {answerFeedback.educationalFact && (
+                  <p className="mt-3 text-gray-800">
+                    {answerFeedback.educationalFact}
+                  </p>
+                )}
 
-            <button
-              onClick={nextQuestion}
-              className="mt-5 w-full bg-blue-900 text-white rounded-xl p-4 text-lg font-bold"
-            >
-              {questionIndex >= totalQuestions - 1
-                ? 'Finish Hunt'
-                : 'Next Question →'}
-            </button>
+                {answerFeedback.lyricMeaning && (
+                  <p className="mt-3 text-gray-700">
+                    <span className="font-bold">Meaning: </span>
+                    {answerFeedback.lyricMeaning}
+                  </p>
+                )}
+
+                {answerFeedback.youtubePrompt && (
+                  <p className="mt-3 text-gray-700">
+                    {answerFeedback.youtubePrompt}
+                  </p>
+                )}
+
+                <button
+                  onClick={nextQuestion}
+                  disabled={finishing}
+                  className="mt-5 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
+                >
+                  {finishing
+                    ? 'Finishing...'
+                    : questionIndex >= totalQuestions - 1
+                      ? 'Finish Hunt'
+                      : 'Next Question →'}
+                </button>
+              </>
+            )}
           </section>
         )}
       </div>

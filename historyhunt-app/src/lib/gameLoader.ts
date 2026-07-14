@@ -1,8 +1,8 @@
-import { supabase } from "@/lib/supabase";
+import { supabase } from '@/lib/supabase'
 
 export async function resolveGameFromQr(qrSlug: string) {
   const { data: venueRaw, error: venueError } = await supabase
-    .from("venues")
+    .from('venues')
     .select(`
       venue_id,
       slug,
@@ -22,24 +22,24 @@ export async function resolveGameFromQr(qrSlug: string) {
         active
       )
     `)
-    .eq("qr_slug", qrSlug)
-    .eq("active", true)
-    .single();
+    .eq('qr_slug', qrSlug)
+    .eq('active', true)
+    .single()
 
   if (venueError || !venueRaw) {
-    throw new Error(`No active venue found for QR slug: ${qrSlug}`);
+    throw new Error(`No active venue found for QR slug: ${qrSlug}`)
   }
 
   const campaign = Array.isArray(venueRaw.campaigns)
     ? venueRaw.campaigns[0]
-    : venueRaw.campaigns;
+    : venueRaw.campaigns
 
   if (!campaign) {
-    throw new Error(`No campaign found for QR slug: ${qrSlug}`);
+    throw new Error(`No campaign found for QR slug: ${qrSlug}`)
   }
 
   const { data: game, error: gameError } = await supabase
-    .from("games")
+    .from('games')
     .select(`
       game_id,
       slug,
@@ -54,6 +54,7 @@ export async function resolveGameFromQr(qrSlug: string) {
       share_url,
       share_title,
       share_text,
+      public_play_url,
       badge_share_enabled,
       badge_download_enabled,
       status,
@@ -61,18 +62,19 @@ export async function resolveGameFromQr(qrSlug: string) {
       ends_at,
       countdown_enabled,
       leaderboard_enabled,
+      registration_required,
       active
     `)
-    .eq("campaign_id", venueRaw.campaign_id)
-    .eq("active", true)
-    .single();
+    .eq('campaign_id', venueRaw.campaign_id)
+    .eq('active', true)
+    .single()
 
   if (gameError || !game) {
-    throw new Error(`No active game found for QR slug: ${qrSlug}`);
+    throw new Error(`No active game found for QR slug: ${qrSlug}`)
   }
 
   const { data: questions, error: questionsError } = await supabase
-    .from("questions")
+    .from('questions')
     .select(`
       question_id,
       sort_order,
@@ -83,25 +85,20 @@ export async function resolveGameFromQr(qrSlug: string) {
       choice_b,
       choice_c,
       choice_d,
-      correct_answer,
-      educational_fact,
-      lyric_meaning,
       category,
       difficulty,
-      points,
       is_bonus,
-      youtube_prompt,
       active
     `)
-    .eq("game_id", game.game_id)
-    .eq("active", true)
-    .order("sort_order", { ascending: true });
+    .eq('game_id', game.game_id)
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
 
   if (questionsError || !questions) {
-    throw new Error(`Questions not found for game: ${game.slug}`);
+    throw new Error(`Questions not found for game: ${game.slug}`)
   }
 
-  const { campaigns, ...venue } = venueRaw;
+  const { campaigns, ...venue } = venueRaw
 
   return {
     qrSlug,
@@ -110,9 +107,9 @@ export async function resolveGameFromQr(qrSlug: string) {
     game,
     questions,
     permissions: {
-      registrationRequired: true,
+      registrationRequired: Boolean(game.registration_required) || Boolean(venue.registration_enabled),
       quizEnabled: venue.quiz_enabled,
       rewardsEnabled: venue.reward_enabled,
     },
-  };
+  }
 }
