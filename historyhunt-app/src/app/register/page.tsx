@@ -194,10 +194,6 @@ function RegisterForm() {
             className="w-40 mx-auto mb-4"
           />
 
-          <p className="text-gray-500 text-sm mt-1">
-            Presented by America 250 Proof™
-          </p>
-
           {config?.gameTitle ? (
             <p className="text-gray-700 font-semibold mt-3">
               {config.gameTitle}
@@ -205,7 +201,7 @@ function RegisterForm() {
           ) : null}
 
           <p className="text-gray-600 mt-3">
-            Choose anonymous play, or register to save your game history.
+            Play anonymously without saving history, or register below to keep your game record.
           </p>
         </div>
 
@@ -218,10 +214,6 @@ function RegisterForm() {
             >
               {anonymousLoading ? 'Starting Anonymous Play...' : 'Play Anonymously'}
             </button>
-
-            <p className="text-center text-xs text-gray-500 mt-2">
-              No game history is captured in anonymous mode.
-            </p>
 
             <div className="flex items-center gap-3 mt-5">
               <div className="h-px bg-gray-200 flex-1" />
