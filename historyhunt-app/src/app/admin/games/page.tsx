@@ -30,6 +30,11 @@ type AdminGameRow = {
   hasQuestions: boolean
   hasBadgeConfig: boolean
   hasShareUrl: boolean
+  hasResultsCta: boolean
+  resultsCtaType: string
+  resultsCtaLabel: string
+  resultsCtaUrl: string
+  resultsCtaNote: string
   playableNow: boolean
   reasonNotPlayable: string
 }
@@ -43,6 +48,7 @@ type AdminGamesResponse = {
     draftCount: number
     scheduledCount: number
     archivedCount: number
+    resultsCtaCount: number
   }
   games: AdminGameRow[]
 }
@@ -452,6 +458,16 @@ export default function AdminGamesPage() {
                               <Pill className={game.hasShareUrl ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}>
                                 Share URL: {yesNo(game.hasShareUrl)}
                               </Pill>
+                              <Pill className={game.hasResultsCta ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}>
+                                Results CTA: {yesNo(game.hasResultsCta)}
+                              </Pill>
+                              {game.hasResultsCta ? (
+                                <div className="max-w-xs text-xs text-gray-600">
+                                  <div>Type: {game.resultsCtaType || 'custom'}</div>
+                                  <div>Label: {game.resultsCtaLabel}</div>
+                                  <div className="truncate">URL: {game.resultsCtaUrl}</div>
+                                </div>
+                              ) : null}
                             </div>
                           </td>
 

@@ -27,6 +27,11 @@ type ResultsResponse = {
     share_text: string
     badge_share_enabled: boolean
     badge_download_enabled: boolean
+    results_cta_enabled: boolean
+    results_cta_type: string
+    results_cta_label: string
+    results_cta_url: string
+    results_cta_note: string
   }
   venue: {
     venue_id: string
@@ -237,6 +242,29 @@ export default function ResultsPage({
             shareTitle={shareTitle}
             shareText={shareText}
           />
+        )}
+
+        {game.results_cta_enabled && game.results_cta_label && game.results_cta_url && (
+          <section className="mt-8 border-t border-slate-200 pt-6">
+            <h2 className="text-xl font-black text-blue-900">
+              {game.results_cta_type === 'donate' ? 'Support the Mission' : 'Next Step'}
+            </h2>
+
+            {game.results_cta_note && (
+              <p className="mt-2 text-slate-700">
+                {game.results_cta_note}
+              </p>
+            )}
+
+            <a
+              href={game.results_cta_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-block rounded-xl bg-green-700 px-6 py-4 text-lg font-bold text-white"
+            >
+              {game.results_cta_label} →
+            </a>
+          </section>
         )}
 
         <section className="mt-8 border-t border-slate-200 pt-6">

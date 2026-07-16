@@ -37,6 +37,11 @@ function sanitizeGame(game: Record<string, unknown> | null) {
     share_text: game.share_text ? String(game.share_text) : '',
     badge_share_enabled: game.badge_share_enabled !== false,
     badge_download_enabled: game.badge_download_enabled !== false,
+    results_cta_enabled: game.results_cta_enabled === true,
+    results_cta_type: game.results_cta_type ? String(game.results_cta_type) : '',
+    results_cta_label: game.results_cta_label ? String(game.results_cta_label) : '',
+    results_cta_url: game.results_cta_url ? String(game.results_cta_url) : '',
+    results_cta_note: game.results_cta_note ? String(game.results_cta_note) : '',
   }
 }
 
@@ -103,7 +108,7 @@ export async function GET(
       : Promise.resolve({ data: null }),
     supabaseAdmin
       .from('games')
-      .select('game_id, slug, title, participant_badge_url, perfect_score_badge_url, share_url, public_play_url, share_title, share_text, badge_share_enabled, badge_download_enabled')
+      .select('game_id, slug, title, participant_badge_url, perfect_score_badge_url, share_url, public_play_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note')
       .eq('game_id', sessionData.game_id)
       .maybeSingle(),
     sessionData.venue_id
