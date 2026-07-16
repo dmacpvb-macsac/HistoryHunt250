@@ -25,6 +25,11 @@ type GameRow = {
   share_text: string | null
   badge_share_enabled: boolean | null
   badge_download_enabled: boolean | null
+  results_cta_enabled: boolean | null
+  results_cta_type: string | null
+  results_cta_label: string | null
+  results_cta_url: string | null
+  results_cta_note: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -239,7 +244,7 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabaseAdmin
       .from('games')
-      .select('game_id, campaign_id, slug, title, status, active, starts_at, ends_at, registration_required, allow_anonymous_players, question_count, total_points, participant_badge_url, perfect_score_badge_url, public_play_url, share_url, share_title, share_text, badge_share_enabled, badge_download_enabled, created_at, updated_at')
+      .select('game_id, campaign_id, slug, title, status, active, starts_at, ends_at, registration_required, allow_anonymous_players, question_count, total_points, participant_badge_url, perfect_score_badge_url, public_play_url, share_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note, created_at, updated_at')
       .order('created_at', { ascending: false }),
 
     supabaseAdmin
@@ -355,6 +360,12 @@ export async function GET(request: NextRequest) {
       publicPlayUrl
     )
 
+    const hasResultsCta = Boolean(
+      game.results_cta_enabled &&
+      game.results_cta_label &&
+      game.results_cta_url
+    )
+
     const playable = evaluatePlayableNow(game, venue, questionCount)
 
     return {
@@ -385,6 +396,11 @@ export async function GET(request: NextRequest) {
       hasQuestions: questionCount > 0,
       hasBadgeConfig,
       hasShareUrl,
+      hasResultsCta,
+      resultsCtaType: game.results_cta_type || '',
+      resultsCtaLabel: game.results_cta_label || '',
+      resultsCtaUrl: game.results_cta_url || '',
+      resultsCtaNote: game.results_cta_note || '',
       playableNow: playable.playableNow,
       reasonNotPlayable: playable.reasonNotPlayable,
     }
@@ -399,6 +415,7 @@ export async function GET(request: NextRequest) {
       draftCount: rows.filter(row => row.status === 'draft').length,
       scheduledCount: rows.filter(row => row.status === 'scheduled').length,
       archivedCount: rows.filter(row => row.status === 'archived').length,
+      resultsCtaCount: rows.filter(row => row.hasResultsCta).length,
     },
     games: rows,
   })
