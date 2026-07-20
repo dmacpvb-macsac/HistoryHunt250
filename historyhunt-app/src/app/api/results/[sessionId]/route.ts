@@ -22,6 +22,20 @@ function sanitizePlayer(player: Record<string, unknown> | null) {
   }
 }
 
+function sanitizeBadge(badge: Record<string, unknown> | null) {
+  if (!badge) return null
+
+  return {
+    badge_id: String(badge.badge_id || ''),
+    slug: String(badge.slug || ''),
+    title: String(badge.title || ''),
+    badge_type: String(badge.badge_type || ''),
+    image_url: badge.image_url ? String(badge.image_url) : '',
+    alt_text: badge.alt_text ? String(badge.alt_text) : '',
+    active: badge.active !== false,
+  }
+}
+
 function sanitizeGame(game: Record<string, unknown> | null) {
   if (!game) return null
 
@@ -29,6 +43,8 @@ function sanitizeGame(game: Record<string, unknown> | null) {
     game_id: String(game.game_id || ''),
     slug: String(game.slug || ''),
     title: String(game.title || ''),
+    completion_badge_id: game.completion_badge_id ? String(game.completion_badge_id) : '',
+    perfect_score_badge_id: game.perfect_score_badge_id ? String(game.perfect_score_badge_id) : '',
     participant_badge_url: game.participant_badge_url ? String(game.participant_badge_url) : '',
     perfect_score_badge_url: game.perfect_score_badge_url ? String(game.perfect_score_badge_url) : '',
     share_url: game.share_url ? String(game.share_url) : '',
@@ -108,7 +124,9 @@ export async function GET(
       : Promise.resolve({ data: null }),
     supabaseAdmin
       .from('games')
-      .select('game_id, slug, title, participant_badge_url, perfect_score_badge_url, share_url, public_play_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note')
+      .select(
+        'game_id, slug, title, completion_badge_id, perfect_score_badge_id, participant_badge_url, perfect_score_badge_url, share_url, public_play_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note'
+      )
       .eq('game_id', sessionData.game_id)
       .maybeSingle(),
     sessionData.venue_id
@@ -136,10 +154,46 @@ export async function GET(
     )
   }
 
+  const badgeIds = [
+    game.completion_badge_id,
+    game.perfect_score_badge_id,
+  ].filter(Boolean)
+
+  let completionBadge = null
+  let perfectScoreBadge = null
+
+  if (badgeIds.length > 0) {
+    const { data: badgeRows, error: badgeError } = await supabaseAdmin
+      .from('badges')
+      .select('badge_id, slug, title, badge_type, image_url, alt_text, active')
+      .in('badge_id', badgeIds)
+
+    if (badgeError) {
+      return NextResponse.json(
+        { error: 'Unable to load badge data for this result.' },
+        { status: 500 }
+      )
+    }
+
+    const badges = (badgeRows || []).map(row =>
+      sanitizeBadge(row as Record<string, unknown>)
+    )
+
+    completionBadge =
+      badges.find(badge => badge?.badge_id === game.completion_badge_id) || null
+
+    perfectScoreBadge =
+      badges.find(badge => badge?.badge_id === game.perfect_score_badge_id) || null
+  }
+
   return NextResponse.json({
     session: sanitizeSession(sessionData as Record<string, unknown>),
     player: sanitizePlayer(playerData as Record<string, unknown> | null),
     game,
+    badges: {
+      completion: completionBadge,
+      perfect_score: perfectScoreBadge,
+    },
     venue: sanitizeVenue(venueData as Record<string, unknown> | null),
     campaign: sanitizeCampaign(campaignData as Record<string, unknown> | null),
   })

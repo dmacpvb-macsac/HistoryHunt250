@@ -61,8 +61,8 @@ type RpcImportPayload = {
   summary: ValidatedWorkbook['summary']
 }
 
-const DEFAULT_WORKBOOK_VERSION = 'Engineering Workbook v1'
-const DEFAULT_IMPORTER_VERSION = 'RC1.4-importer-0.1'
+const DEFAULT_WORKBOOK_VERSION = 'Engineering Workbook v1.2'
+const DEFAULT_IMPORTER_VERSION = 'RC2-importer-badge-slugs-0.1'
 const DEFAULT_SITE_ORIGIN = 'https://america250proof.com'
 const MIN_PLAUSIBLE_YEAR = 2000
 const MAX_PLAUSIBLE_YEAR = 2100
@@ -146,11 +146,17 @@ function normalizeHuntInfoForRpc(huntInfo: HuntInfo, totalPoints: number, questi
     countdown_enabled: huntInfo.countdownEnabled,
     leaderboard_enabled: huntInfo.leaderboardEnabled,
     registration_required: huntInfo.registrationRequired,
+    allow_anonymous_players: huntInfo.allowAnonymousPlayers,
     badge_enabled: huntInfo.badgeEnabled,
-    participant_badge_url: cleanText(huntInfo.completedBadgeImageUrl),
-    perfect_score_badge_url: cleanText(huntInfo.perfectScoreBadgeImageUrl),
+    completion_badge_slug: cleanText(huntInfo.completionBadgeSlug),
+    perfect_score_badge_slug: cleanText(huntInfo.perfectScoreBadgeSlug),
     badge_download_enabled: huntInfo.badgeDownloadEnabled,
     badge_share_enabled: huntInfo.badgeSocialShareEnabled,
+    results_cta_enabled: huntInfo.resultsCtaEnabled,
+    results_cta_type: cleanText(huntInfo.resultsCtaType),
+    results_cta_label: cleanText(huntInfo.resultsCtaLabel),
+    results_cta_url: cleanText(huntInfo.resultsCtaUrl),
+    results_cta_note: cleanText(huntInfo.resultsCtaNote),
   }
 }
 

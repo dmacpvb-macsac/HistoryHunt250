@@ -4,6 +4,7 @@ export type ImportStatus = 'pending' | 'validated' | 'imported' | 'failed' | 'ro
 export type GameStatus = 'draft' | 'scheduled'
 export type GameType = 'venue' | 'web' | 'event' | 'classroom' | 'community'
 export type CorrectChoice = 'A' | 'B' | 'C' | 'D'
+export type ResultsCtaType = 'donate' | 'learn_more' | 'sponsor' | 'merch' | 'custom'
 
 export type WorkbookSheets = {
   huntInfo: Record<string, unknown>[]
@@ -34,11 +35,17 @@ export type HuntInfo = {
   countdownEnabled: boolean
   leaderboardEnabled: boolean
   registrationRequired: boolean
+  allowAnonymousPlayers: boolean
   badgeEnabled: boolean
-  completedBadgeImageUrl?: string
-  perfectScoreBadgeImageUrl?: string
+  completionBadgeSlug?: string
+  perfectScoreBadgeSlug?: string
   badgeDownloadEnabled: boolean
   badgeSocialShareEnabled: boolean
+  resultsCtaEnabled: boolean
+  resultsCtaType?: ResultsCtaType
+  resultsCtaLabel?: string
+  resultsCtaUrl?: string
+  resultsCtaNote?: string
 }
 
 export type QuestionImportRow = {

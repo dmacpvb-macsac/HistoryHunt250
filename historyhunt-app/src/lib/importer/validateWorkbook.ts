@@ -5,6 +5,7 @@ import type {
   HuntInfo,
   ImportIssue,
   QuestionImportRow,
+  ResultsCtaType,
   ValidatedWorkbook,
   WorkbookSheets,
 } from './types'
@@ -97,11 +98,17 @@ function parseHuntInfo(row: Record<string, unknown>): HuntInfo {
     countdownEnabled: boolValue(row, false, 'Countdown Enabled'),
     leaderboardEnabled: boolValue(row, false, 'Leaderboard Enabled'),
     registrationRequired: boolValue(row, true, 'Registration Required'),
+    allowAnonymousPlayers: boolValue(row, true, 'Allow Anonymous Players'),
     badgeEnabled: boolValue(row, true, 'Badge Enabled'),
-    completedBadgeImageUrl: value(row, 'Completed Badge Image URL', 'Participant Badge URL'),
-    perfectScoreBadgeImageUrl: value(row, 'Perfect Score Badge Image URL'),
+    completionBadgeSlug: value(row, 'Completion Badge Slug'),
+    perfectScoreBadgeSlug: value(row, 'Perfect Score Badge Slug'),
     badgeDownloadEnabled: boolValue(row, true, 'Badge Download Enabled'),
     badgeSocialShareEnabled: boolValue(row, true, 'Badge Social Share Enabled'),
+    resultsCtaEnabled: boolValue(row, false, 'Results CTA Enabled'),
+    resultsCtaType: value(row, 'Results CTA Type').toLowerCase() as ResultsCtaType,
+    resultsCtaLabel: value(row, 'Results CTA Label'),
+    resultsCtaUrl: value(row, 'Results CTA URL'),
+    resultsCtaNote: value(row, 'Results CTA Note'),
   }
 }
 
@@ -194,6 +201,14 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_QR_SLUG', 'QR Slug must be URL-safe, for example america-250-behind-the-lyrics.', 2, 'QR Slug')
     }
 
+    if (huntInfo.completionBadgeSlug && !slugSafe(huntInfo.completionBadgeSlug)) {
+      addIssue(errors, 'error', 'Hunt Info', 'INVALID_COMPLETION_BADGE_SLUG', 'Completion Badge Slug must contain lowercase letters, numbers, and hyphens only.', 2, 'Completion Badge Slug')
+    }
+
+    if (huntInfo.perfectScoreBadgeSlug && !slugSafe(huntInfo.perfectScoreBadgeSlug)) {
+      addIssue(errors, 'error', 'Hunt Info', 'INVALID_PERFECT_BADGE_SLUG', 'Perfect Score Badge Slug must contain lowercase letters, numbers, and hyphens only.', 2, 'Perfect Score Badge Slug')
+    }
+
     const validStatuses: GameStatus[] = ['draft', 'scheduled']
     if (!validStatuses.includes(huntInfo.gameStatus)) {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_GAME_STATUS', 'Game Status must be Draft or Scheduled for importer use.', 2, 'Game Status')
@@ -231,8 +246,7 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
     const urls: Array<[string | undefined, string]> = [
       [huntInfo.publicPlayUrl, 'Public Play URL'],
       [huntInfo.shareUrl, 'Share URL'],
-      [huntInfo.completedBadgeImageUrl, 'Completed Badge Image URL'],
-      [huntInfo.perfectScoreBadgeImageUrl, 'Perfect Score Badge Image URL'],
+      [huntInfo.resultsCtaUrl, 'Results CTA URL'],
     ]
 
     for (const [url, label] of urls) {
@@ -241,12 +255,36 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       }
     }
 
-    if (huntInfo.badgeEnabled && !huntInfo.completedBadgeImageUrl) {
-      addIssue(warnings, 'warning', 'Hunt Info', 'MISSING_COMPLETED_BADGE', 'Badge Enabled is true but Completed Badge Image URL is blank; app default may be used.', 2, 'Completed Badge Image URL')
+    const validCtaTypes: ResultsCtaType[] = ['donate', 'learn_more', 'sponsor', 'merch', 'custom']
+
+    if (huntInfo.resultsCtaType && !validCtaTypes.includes(huntInfo.resultsCtaType)) {
+      addIssue(errors, 'error', 'Hunt Info', 'INVALID_RESULTS_CTA_TYPE', 'Results CTA Type must be donate, learn_more, sponsor, merch, or custom.', 2, 'Results CTA Type')
+    }
+
+    if (huntInfo.resultsCtaEnabled) {
+      if (!huntInfo.resultsCtaType) {
+        addIssue(errors, 'error', 'Hunt Info', 'MISSING_RESULTS_CTA_TYPE', 'Results CTA Type is required when Results CTA Enabled is Yes.', 2, 'Results CTA Type')
+      }
+
+      if (!huntInfo.resultsCtaLabel) {
+        addIssue(errors, 'error', 'Hunt Info', 'MISSING_RESULTS_CTA_LABEL', 'Results CTA Label is required when Results CTA Enabled is Yes.', 2, 'Results CTA Label')
+      }
+
+      if (!huntInfo.resultsCtaUrl) {
+        addIssue(errors, 'error', 'Hunt Info', 'MISSING_RESULTS_CTA_URL', 'Results CTA URL is required when Results CTA Enabled is Yes.', 2, 'Results CTA URL')
+      }
     }
 
     if (!huntInfo.shareUrl && huntInfo.publicPlayUrl) {
       addIssue(warnings, 'warning', 'Hunt Info', 'MISSING_SHARE_URL', 'Share URL is blank; Public Play URL can be used as fallback.', 2, 'Share URL')
+    }
+
+    if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
+      addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_COMPLETION_BADGE', 'Completion Badge Slug is blank; importer will use default-completed.', 2, 'Completion Badge Slug')
+    }
+
+    if (huntInfo.badgeEnabled && !huntInfo.perfectScoreBadgeSlug) {
+      addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_PERFECT_BADGE', 'Perfect Score Badge Slug is blank; importer will use default-perfect.', 2, 'Perfect Score Badge Slug')
     }
   }
 

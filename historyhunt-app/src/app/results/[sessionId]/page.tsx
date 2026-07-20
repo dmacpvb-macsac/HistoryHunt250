@@ -4,6 +4,16 @@ import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import ShareBar from '@/components/share/ShareBar'
 
+type BadgeResponse = {
+  badge_id: string
+  slug: string
+  title: string
+  badge_type: string
+  image_url: string
+  alt_text: string
+  active: boolean
+} | null
+
 type ResultsResponse = {
   session: {
     session_id: string
@@ -19,6 +29,8 @@ type ResultsResponse = {
     game_id: string
     slug: string
     title: string
+    completion_badge_id: string
+    perfect_score_badge_id: string
     participant_badge_url: string
     perfect_score_badge_url: string
     share_url: string
@@ -32,6 +44,10 @@ type ResultsResponse = {
     results_cta_label: string
     results_cta_url: string
     results_cta_note: string
+  }
+  badges: {
+    completion: BadgeResponse
+    perfect_score: BadgeResponse
   }
   venue: {
     venue_id: string
@@ -102,17 +118,38 @@ export default function ResultsPage({
   const session = results?.session || null
   const player = results?.player || null
   const game = results?.game || null
+  const badges = results?.badges || null
   const venue = results?.venue || null
-  const campaign = results?.campaign || null
 
   const isPerfect = session && Number(session.score) >= Number(session.total_points)
 
+  const selectedBadge = useMemo(() => {
+    if (!game) return null
+
+    if (isPerfect && badges?.perfect_score?.active !== false && badges?.perfect_score?.image_url) {
+      return badges.perfect_score
+    }
+
+    if (badges?.completion?.active !== false && badges?.completion?.image_url) {
+      return badges.completion
+    }
+
+    return null
+  }, [badges, game, isPerfect])
+
   const badgeUrl = useMemo(() => {
+    if (selectedBadge?.image_url) return selectedBadge.image_url
     if (!game) return ''
+
     return isPerfect
       ? game.perfect_score_badge_url || game.participant_badge_url || ''
       : game.participant_badge_url || ''
-  }, [game, isPerfect])
+  }, [game, isPerfect, selectedBadge])
+
+  const badgeAlt =
+    selectedBadge?.alt_text ||
+    selectedBadge?.title ||
+    (isPerfect ? 'Perfect Score Badge' : 'Completed Hunt Badge')
 
   const playUrl = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -179,7 +216,7 @@ export default function ResultsPage({
     <main className="min-h-screen bg-slate-100 p-5 text-center">
       <div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
         <p className="text-sm font-bold uppercase tracking-wide text-red-700">
-          {campaign?.title || 'History Hunt™'}
+          {game.title || 'History Hunt™'}
         </p>
 
         <h1 className="mt-2 text-4xl font-black text-blue-900">
@@ -201,7 +238,7 @@ export default function ResultsPage({
           <section className="mt-6">
             <img
               src={badgeUrl}
-              alt={isPerfect ? 'Perfect Score Badge' : 'Completed Hunt Badge'}
+              alt={badgeAlt}
               className="mx-auto w-56 rounded-2xl shadow-md"
             />
 

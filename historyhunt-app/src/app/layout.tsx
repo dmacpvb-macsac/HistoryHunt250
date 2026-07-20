@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Freedom Fest 250",
-  description: "Mac & Sac Enterprises",
+  title: "History Hunt™",
+  description: "History Hunt™ by Mac & Sac Enterprises",
 };
 
 export default function RootLayout({
