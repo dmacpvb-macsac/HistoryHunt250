@@ -272,7 +272,7 @@ export default function PlayPage({
       <main className="min-h-screen bg-slate-100 p-6 text-center">
         <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-xl">
           <h1 className="text-2xl font-bold text-blue-900">
-            {hunt?.game?.title || 'History Hunt™'}
+            {hunt?.campaign?.title || hunt?.game?.title || 'History Hunt™'}
           </h1>
 
           <p className="mt-4 text-lg text-gray-700">{blockedMessage}</p>
@@ -308,12 +308,8 @@ export default function PlayPage({
   return (
     <main className="min-h-screen bg-slate-100 p-4">
       <div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
-        <p className="text-center text-sm font-bold tracking-wide text-red-700">
-          {hunt.campaign?.title || 'History Hunt™'}
-        </p>
-
-        <h1 className="mt-1 text-center text-2xl font-bold text-blue-900">
-          {hunt.game.title}
+        <h1 className="text-center text-2xl font-bold text-blue-900">
+          {hunt.campaign?.title || hunt.game.title || 'History Hunt™'}
         </h1>
 
         <div className="mt-5 flex items-center justify-between text-sm text-gray-600">
