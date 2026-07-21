@@ -406,7 +406,7 @@ export default function AdminImportPage() {
               disabled={working}
               onChange={event => setAdminToken(event.target.value)}
               className="mt-2 block w-full rounded-xl border bg-white p-3"
-              placeholder="Enter Dev-Test import token"
+              placeholder="Enter Admin Import Token"
               autoComplete="off"
             />
             <p className="mt-2 text-sm text-orange-900">
