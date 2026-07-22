@@ -37,7 +37,22 @@ function asArray<T>(value: T[] | null) {
   return Array.isArray(value) ? value : []
 }
 
-export async function GET() {
+const ALLOWED_ORIGINS = new Set([
+  'https://historyhuntgames.com',
+  'https://www.historyhuntgames.com',
+])
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get('origin') || ''
+
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : '',
+    'Vary': 'Origin',
+    'Cache-Control': 'no-store',
+  }
+}
+
+export async function GET(request: Request) {
   const [gamesResult, venuesResult, questionsResult] = await Promise.all([
     supabaseAdmin
       .from('games')
@@ -137,9 +152,7 @@ export async function GET() {
       games: currentGames,
     },
     {
-      headers: {
-        'Cache-Control': 'no-store',
-      },
+      headers: corsHeaders(request),
     }
   )
 }
