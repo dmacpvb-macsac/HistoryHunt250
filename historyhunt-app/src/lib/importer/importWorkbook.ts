@@ -63,7 +63,7 @@ type RpcImportPayload = {
 
 const DEFAULT_WORKBOOK_VERSION = 'Engineering Workbook v1.2'
 const DEFAULT_IMPORTER_VERSION = 'RC2-importer-badge-slugs-0.1'
-const DEFAULT_SITE_ORIGIN = 'https://america250proof.com'
+const DEFAULT_SITE_ORIGIN = 'https://play.historyhuntgames.com'
 const MIN_PLAUSIBLE_YEAR = 2000
 const MAX_PLAUSIBLE_YEAR = 2100
 
