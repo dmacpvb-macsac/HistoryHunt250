@@ -11,6 +11,7 @@ type GameRow = {
   campaign_id: string | null
   slug: string | null
   title: string | null
+  game_type: string | null
   status: string | null
   active: boolean | null
   starts_at: string | null
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
     supabaseAdmin
       .from('games')
       .select(
-        'game_id, campaign_id, slug, title, status, active, starts_at, ends_at'
+        'game_id, campaign_id, slug, title, game_type, status, active, starts_at, ends_at'
       )
       .order('created_at', { ascending: false }),
 
@@ -136,6 +137,7 @@ export async function GET(request: Request) {
     return [{
       title: game.title || '',
       gameSlug: game.slug || '',
+      gameType: game.game_type || '',
       qrSlug,
       venueName: venue.name || '',
       publicPlayUrl:

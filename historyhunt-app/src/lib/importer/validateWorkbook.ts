@@ -87,7 +87,7 @@ function parseHuntInfo(row: Record<string, unknown>): HuntInfo {
     contributorEmail: value(row, 'Contributor Email', 'Submitted Email'),
     publicDescription: value(row, 'Public Description', 'Description'),
     intendedAudience: value(row, 'Intended Audience'),
-    gameType: (value(row, 'Game Type') || 'venue').toLowerCase() as GameType,
+    gameType: value(row, 'Game Type').toLowerCase() as GameType,
     gameStatus: (value(row, 'Game Status', 'Status') || 'draft').toLowerCase() as GameStatus,
     startDateTime: value(row, 'Start DateTime', 'Start Date Time', 'Starts At'),
     endDateTime: value(row, 'End DateTime', 'End Date Time', 'Ends At'),
@@ -215,8 +215,27 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
     }
 
     const validTypes: GameType[] = ['venue', 'web', 'event', 'classroom', 'community']
-    if (!validTypes.includes(huntInfo.gameType)) {
-      addIssue(errors, 'error', 'Hunt Info', 'INVALID_GAME_TYPE', 'Game Type must be venue, web, event, classroom, or community.', 2, 'Game Type')
+
+    if (!huntInfo.gameType) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'MISSING_GAME_TYPE',
+        'Game Type is required.',
+        2,
+        'Game Type'
+      )
+    } else if (!validTypes.includes(huntInfo.gameType)) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'INVALID_GAME_TYPE',
+        'Game Type must be venue, web, event, classroom, or community.',
+        2,
+        'Game Type'
+      )
     }
 
     if (huntInfo.gameStatus === 'scheduled') {
