@@ -127,40 +127,57 @@ async function loadHunt(qrSlug: string) {
     throw new Error(`No campaign found for QR slug: ${qrSlug}`)
   }
 
-  const { data: game, error: gameError } = await supabaseAdmin
+  const canonicalPlayUrl =
+    `https://play.historyhuntgames.com/play/${qrSlug}`
+
+  const gameSelect = `
+    game_id,
+    campaign_id,
+    slug,
+    title,
+    description,
+    state,
+    city,
+    question_count,
+    total_points,
+    participant_badge_url,
+    perfect_score_badge_url,
+    share_url,
+    share_title,
+    share_text,
+    public_play_url,
+    badge_share_enabled,
+    badge_download_enabled,
+    status,
+    starts_at,
+    ends_at,
+    countdown_enabled,
+    leaderboard_enabled,
+    registration_required,
+    allow_anonymous_players,
+    active
+  `
+
+  let { data: game, error: gameError } = await supabaseAdmin
     .from('games')
-    .select(`
-      game_id,
-      campaign_id,
-      slug,
-      title,
-      description,
-      state,
-      city,
-      question_count,
-      total_points,
-      participant_badge_url,
-      perfect_score_badge_url,
-      share_url,
-      share_title,
-      share_text,
-      public_play_url,
-      badge_share_enabled,
-      badge_download_enabled,
-      status,
-      starts_at,
-      ends_at,
-      countdown_enabled,
-      leaderboard_enabled,
-      registration_required,
-      allow_anonymous_players,
-      active
-    `)
+    .select(gameSelect)
     .eq('campaign_id', venueRecord.campaign_id)
+    .eq('public_play_url', canonicalPlayUrl)
     .eq('active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
     .maybeSingle()
+
+  if (!game && !gameError) {
+    const fallbackResult = await supabaseAdmin
+      .from('games')
+      .select(gameSelect)
+      .eq('campaign_id', venueRecord.campaign_id)
+      .eq('slug', qrSlug)
+      .eq('active', true)
+      .maybeSingle()
+
+    game = fallbackResult.data
+    gameError = fallbackResult.error
+  }
 
   if (gameError || !game) {
     throw new Error(`No active game found for QR slug: ${qrSlug}`)
