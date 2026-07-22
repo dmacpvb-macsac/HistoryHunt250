@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'crypto'
+
 import { NextRequest, NextResponse } from 'next/server'
 
 import { supabaseAdmin } from '@/lib/supabase/admin'
@@ -263,13 +265,14 @@ async function resolvePlayerId(
   return String(playerExists.player_id)
 }
 
-async function resetIncompleteSession(sessionId: string) {
+async function resetIncompleteSession(sessionId: string, sessionAccessTokenHash: string) {
   const { error: resetSessionError } = await supabaseAdmin
     .from('sessions')
     .update({
       score: 0,
       completed: false,
       completed_at: null,
+      session_access_token_hash: sessionAccessTokenHash,
     })
     .eq('session_id', sessionId)
 
@@ -319,11 +322,27 @@ function isDuplicateSessionError(error: { code?: string; message?: string } | nu
   )
 }
 
+function generateSessionAccessToken() {
+  return randomBytes(32).toString('hex')
+}
+
+function hashSessionAccessToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
 async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId: string | null) {
+  const sessionAccessToken = generateSessionAccessToken()
+  const sessionAccessTokenHash = hashSessionAccessToken(sessionAccessToken)
+
   const existingSessionId = await findIncompleteSession(hunt.game.game_id, playerId)
 
   if (existingSessionId) {
-    return resetIncompleteSession(existingSessionId)
+    await resetIncompleteSession(existingSessionId, sessionAccessTokenHash)
+
+    return {
+      sessionId: existingSessionId,
+      sessionAccessToken,
+    }
   }
 
   const { data: newSession, error: sessionError } = await supabaseAdmin
@@ -336,6 +355,7 @@ async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId
       score: 0,
       total_points: hunt.game.total_points || 0,
       completed: false,
+      session_access_token_hash: sessionAccessTokenHash,
     })
     .select('session_id')
     .single()
@@ -345,14 +365,22 @@ async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId
       const duplicateSessionId = await findIncompleteSession(hunt.game.game_id, playerId)
 
       if (duplicateSessionId) {
-        return resetIncompleteSession(duplicateSessionId)
+        await resetIncompleteSession(duplicateSessionId, sessionAccessTokenHash)
+
+        return {
+          sessionId: duplicateSessionId,
+          sessionAccessToken,
+        }
       }
     }
 
     throw new Error(sessionError?.message || 'Unable to start game session.')
   }
 
-  return String(newSession.session_id)
+  return {
+    sessionId: String(newSession.session_id),
+    sessionAccessToken,
+  }
 }
 
 export async function POST(
@@ -402,10 +430,11 @@ export async function POST(
       anonymousRequested
     )
 
-    const sessionId = await startSession(hunt, playerId)
+    const { sessionId, sessionAccessToken } = await startSession(hunt, playerId)
 
     return NextResponse.json({
       sessionId,
+      sessionAccessToken,
       playerId,
       anonymous: playerId === null,
       hunt,

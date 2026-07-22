@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from 'crypto'
+
 import { NextRequest, NextResponse } from 'next/server'
 
 import { supabaseAdmin } from '@/lib/supabase/admin'
@@ -6,8 +8,23 @@ export const runtime = 'nodejs'
 
 type AnswerRequestBody = {
   sessionId?: string
+  sessionAccessToken?: string
   questionId?: string
   selectedAnswer?: string
+}
+
+function hashSessionAccessToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function sessionAccessTokenMatches(token: string, storedHash: string) {
+  const providedHash = Buffer.from(hashSessionAccessToken(token), 'hex')
+  const expectedHash = Buffer.from(storedHash, 'hex')
+
+  return (
+    providedHash.length === expectedHash.length &&
+    timingSafeEqual(providedHash, expectedHash)
+  )
 }
 
 function normalizeChoice(value: unknown) {
@@ -44,19 +61,20 @@ export async function POST(request: NextRequest) {
   }
 
   const sessionId = String(body.sessionId || '').trim()
+  const sessionAccessToken = String(body.sessionAccessToken || '').trim()
   const questionId = String(body.questionId || '').trim()
   const selectedAnswer = normalizeChoice(body.selectedAnswer)
 
-  if (!sessionId || !questionId || !validChoice(selectedAnswer)) {
+  if (!sessionId || !sessionAccessToken || !questionId || !validChoice(selectedAnswer)) {
     return NextResponse.json(
-      { error: 'Session, question, and selected answer are required.' },
+      { error: 'Session, session token, question, and selected answer are required.' },
       { status: 400 }
     )
   }
 
   const { data: session, error: sessionError } = await supabaseAdmin
     .from('sessions')
-    .select('session_id, player_id, game_id, completed')
+    .select('session_id, player_id, game_id, completed, session_access_token_hash')
     .eq('session_id', sessionId)
     .maybeSingle()
 
@@ -64,6 +82,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Session not found.' },
       { status: 404 }
+    )
+  }
+
+  const storedTokenHash = String(session.session_access_token_hash || '')
+
+  if (!storedTokenHash || !sessionAccessTokenMatches(sessionAccessToken, storedTokenHash)) {
+    return NextResponse.json(
+      { error: 'Invalid session authorization.' },
+      { status: 401 }
     )
   }
 

@@ -53,6 +53,7 @@ type HuntData = {
 
 type StartResponse = {
   sessionId?: string
+  sessionAccessToken?: string
   playerId?: string | null
   hunt?: HuntData
   blockedMessage?: string
@@ -90,6 +91,7 @@ export default function PlayPage({
 
   const [hunt, setHunt] = useState<HuntData | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionAccessToken, setSessionAccessToken] = useState<string | null>(null)
   const [questionIndex, setQuestionIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback | null>(null)
@@ -138,12 +140,13 @@ export default function PlayPage({
           return
         }
 
-        if (!body.hunt || !body.sessionId) {
+        if (!body.hunt || !body.sessionId || !body.sessionAccessToken) {
           throw new Error('Start API returned an invalid response.')
         }
 
         setHunt(body.hunt)
         setSessionId(body.sessionId)
+        setSessionAccessToken(body.sessionAccessToken)
         setQuestionIndex(0)
         setSelectedAnswer(null)
         setAnswerFeedback(null)
@@ -160,7 +163,7 @@ export default function PlayPage({
   }, [qrSlug, router])
 
   async function chooseAnswer(choice: 'A' | 'B' | 'C' | 'D') {
-    if (!hunt || !sessionId || selectedAnswer || savingAnswer) return
+    if (!hunt || !sessionId || !sessionAccessToken || selectedAnswer || savingAnswer) return
 
     const question = hunt.questions[questionIndex]
 
@@ -176,6 +179,7 @@ export default function PlayPage({
         },
         body: JSON.stringify({
           sessionId,
+          sessionAccessToken,
           questionId: question.question_id,
           selectedAnswer: choice,
         }),
@@ -208,7 +212,7 @@ export default function PlayPage({
   }
 
   async function nextQuestion() {
-    if (!hunt || !sessionId || finishing) return
+    if (!hunt || !sessionId || !sessionAccessToken || finishing) return
 
     const isLastQuestion = questionIndex >= hunt.questions.length - 1
 
@@ -229,7 +233,10 @@ export default function PlayPage({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({
+          sessionId,
+          sessionAccessToken,
+        }),
       })
 
       const body = await response.json().catch(() => ({})) as CompleteResponse
