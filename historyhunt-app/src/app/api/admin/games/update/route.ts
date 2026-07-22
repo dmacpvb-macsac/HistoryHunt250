@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
   const { data: game, error: gameError } = await supabaseAdmin
     .from('games')
-    .select('game_id, campaign_id, slug')
+    .select('game_id, campaign_id, slug, public_play_url')
     .eq('game_id', gameId)
     .maybeSingle()
 
@@ -227,11 +227,24 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (venueUpdate && game.campaign_id) {
+  if (venueUpdate) {
+    const publicPlayQrSlug = game.public_play_url
+      ? String(game.public_play_url).split('/').filter(Boolean).pop() || ''
+      : ''
+
+    const qrSlug = publicPlayQrSlug || game.slug || ''
+
+    if (!qrSlug) {
+      return NextResponse.json(
+        { error: 'Unable to determine venue QR slug for this game.' },
+        { status: 500 }
+      )
+    }
+
     const { error: updateVenueError } = await supabaseAdmin
       .from('venues')
       .update(venueUpdate)
-      .eq('campaign_id', game.campaign_id)
+      .eq('qr_slug', qrSlug)
 
     if (updateVenueError) {
       return NextResponse.json(

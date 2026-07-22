@@ -65,7 +65,7 @@ export async function resolveGameFromQr(qrSlug: string) {
       registration_required,
       active
     `)
-    .eq('campaign_id', venueRaw.campaign_id)
+    .eq('slug', qrSlug)
     .eq('active', true)
     .single()
 

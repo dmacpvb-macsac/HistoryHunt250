@@ -157,12 +157,10 @@ export async function GET(request: NextRequest) {
   const campaignById = new Map(campaigns.map(campaign => [campaign.campaign_id, campaign]))
   const importBatchById = new Map(importBatches.map(batch => [batch.import_batch_id, batch]))
 
-  const venuesByCampaignId = new Map<string, VenueRow[]>()
+  const venueByQrSlug = new Map<string, VenueRow>()
   for (const venue of venues) {
-    if (!venue.campaign_id) continue
-    const existing = venuesByCampaignId.get(venue.campaign_id) || []
-    existing.push(venue)
-    venuesByCampaignId.set(venue.campaign_id, existing)
+    if (!venue.qr_slug) continue
+    venueByQrSlug.set(venue.qr_slug, venue)
   }
 
   const questionsByGameId = new Map<string, QuestionRow[]>()
@@ -179,12 +177,13 @@ export async function GET(request: NextRequest) {
 
   const rows = games.map(game => {
     const campaign = game.campaign_id ? campaignById.get(game.campaign_id) || null : null
-    const campaignVenues = game.campaign_id ? venuesByCampaignId.get(game.campaign_id) || [] : []
-    const venue =
-      campaignVenues.find(item => item.active !== false && Boolean(item.qr_slug)) ||
-      campaignVenues.find(item => Boolean(item.qr_slug)) ||
-      campaignVenues[0] ||
-      null
+
+    const publicPlayQrSlug = game.public_play_url
+      ? game.public_play_url.split('/').filter(Boolean).pop() || ''
+      : ''
+
+    const qrSlug = publicPlayQrSlug || game.slug || ''
+    const venue = qrSlug ? venueByQrSlug.get(qrSlug) || null : null
 
     const gameQuestions = questionsByGameId.get(game.game_id) || []
     const activeQuestions = gameQuestions.filter(question => question.active !== false)

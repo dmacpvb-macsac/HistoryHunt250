@@ -12,6 +12,7 @@ type GameRow = {
   slug: string | null
   title: string | null
   game_type: string | null
+  public_play_url: string | null
   status: string | null
   active: boolean | null
   starts_at: string | null
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
     supabaseAdmin
       .from('games')
       .select(
-        'game_id, campaign_id, slug, title, game_type, status, active, starts_at, ends_at'
+        'game_id, campaign_id, slug, title, game_type, public_play_url, status, active, starts_at, ends_at'
       )
       .order('created_at', { ascending: false }),
 
@@ -91,14 +92,11 @@ export async function GET(request: Request) {
   const venues = asArray(venuesResult.data as VenueRow[] | null)
   const questions = asArray(questionsResult.data as QuestionRow[] | null)
 
-  const venuesByCampaignId = new Map<string, VenueRow[]>()
+  const venueByQrSlug = new Map<string, VenueRow>()
 
   for (const venue of venues) {
-    if (!venue.campaign_id) continue
-
-    const existing = venuesByCampaignId.get(venue.campaign_id) || []
-    existing.push(venue)
-    venuesByCampaignId.set(venue.campaign_id, existing)
+    if (!venue.qr_slug) continue
+    venueByQrSlug.set(venue.qr_slug, venue)
   }
 
   const questionCountByGameId = new Map<string, number>()
@@ -113,17 +111,12 @@ export async function GET(request: Request) {
   }
 
   const currentGames = games.flatMap(game => {
-    const campaignVenues = game.campaign_id
-      ? venuesByCampaignId.get(game.campaign_id) || []
-      : []
+    const publicPlayQrSlug = game.public_play_url
+      ? game.public_play_url.split('/').filter(Boolean).pop() || ''
+      : ''
 
-    const venue =
-      campaignVenues.find(
-        item => item.active !== false && Boolean(item.qr_slug)
-      ) ||
-      campaignVenues.find(item => Boolean(item.qr_slug)) ||
-      campaignVenues[0] ||
-      null
+    const qrSlug = publicPlayQrSlug || game.slug || ''
+    const venue = qrSlug ? venueByQrSlug.get(qrSlug) || null : null
 
     const questionCount = questionCountByGameId.get(game.game_id) || 0
     const playable = evaluatePlayableNow(game, venue, questionCount)
@@ -131,8 +124,6 @@ export async function GET(request: Request) {
     if (!playable.playableNow || !venue?.qr_slug) {
       return []
     }
-
-    const qrSlug = venue.qr_slug
 
     return [{
       title: game.title || '',

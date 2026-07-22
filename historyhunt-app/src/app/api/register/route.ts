@@ -96,10 +96,8 @@ async function loadRegistrationConfig(qrSlug: string) {
       starts_at,
       ends_at
     `)
-    .eq('campaign_id', venue.campaign_id)
+    .eq('slug', qrSlug)
     .eq('active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
     .maybeSingle()
 
   if (gameError || !game) {

@@ -158,26 +158,12 @@ async function loadHunt(qrSlug: string) {
     active
   `
 
-  let { data: game, error: gameError } = await supabaseAdmin
+  const { data: game, error: gameError } = await supabaseAdmin
     .from('games')
     .select(gameSelect)
-    .eq('campaign_id', venueRecord.campaign_id)
-    .eq('public_play_url', canonicalPlayUrl)
+    .eq('slug', qrSlug)
     .eq('active', true)
     .maybeSingle()
-
-  if (!game && !gameError) {
-    const fallbackResult = await supabaseAdmin
-      .from('games')
-      .select(gameSelect)
-      .eq('campaign_id', venueRecord.campaign_id)
-      .eq('slug', qrSlug)
-      .eq('active', true)
-      .maybeSingle()
-
-    game = fallbackResult.data
-    gameError = fallbackResult.error
-  }
 
   if (gameError || !game) {
     throw new Error(`No active game found for QR slug: ${qrSlug}`)
