@@ -82,8 +82,19 @@ export default function ResultsPage({
       setError('')
 
       try {
+        const sessionAccessToken = sessionStorage.getItem(
+          `session_access_token:${sessionId}`
+        )
+
+        if (!sessionAccessToken) {
+          throw new Error('Session authorization is unavailable for this result.')
+        }
+
         const response = await fetch(`/api/results/${encodeURIComponent(sessionId)}`, {
           cache: 'no-store',
+          headers: {
+            'x-session-access-token': sessionAccessToken,
+          },
         })
 
         const body = await response.json().catch(() => ({})) as ResultsResponse

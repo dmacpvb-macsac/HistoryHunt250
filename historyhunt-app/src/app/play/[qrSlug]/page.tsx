@@ -147,6 +147,10 @@ export default function PlayPage({
         setHunt(body.hunt)
         setSessionId(body.sessionId)
         setSessionAccessToken(body.sessionAccessToken)
+        sessionStorage.setItem(
+          `session_access_token:${body.sessionId}`,
+          body.sessionAccessToken
+        )
         setQuestionIndex(0)
         setSelectedAnswer(null)
         setAnswerFeedback(null)

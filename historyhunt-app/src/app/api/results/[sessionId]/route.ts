@@ -1,8 +1,24 @@
+import { createHash, timingSafeEqual } from 'crypto'
+
 import { NextResponse } from 'next/server'
 
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
+
+function hashSessionAccessToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function sessionAccessTokenMatches(token: string, storedHash: string) {
+  const providedHash = Buffer.from(hashSessionAccessToken(token), 'hex')
+  const expectedHash = Buffer.from(storedHash, 'hex')
+
+  return (
+    providedHash.length === expectedHash.length &&
+    timingSafeEqual(providedHash, expectedHash)
+  )
+}
 
 function sanitizeSession(session: Record<string, unknown>) {
   return {
@@ -84,14 +100,24 @@ function sanitizeCampaign(campaign: Record<string, unknown> | null) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params
+  const sessionAccessToken = String(
+    request.headers.get('x-session-access-token') || ''
+  ).trim()
+
+  if (!sessionAccessToken) {
+    return NextResponse.json(
+      { error: 'Session authorization is required.' },
+      { status: 401 }
+    )
+  }
 
   const { data: sessionData, error: sessionError } = await supabaseAdmin
     .from('sessions')
-    .select('session_id, player_id, campaign_id, venue_id, game_id, score, total_points, completed, completed_at')
+    .select('session_id, player_id, campaign_id, venue_id, game_id, score, total_points, completed, completed_at, session_access_token_hash')
     .eq('session_id', sessionId)
     .maybeSingle()
 
@@ -99,6 +125,15 @@ export async function GET(
     return NextResponse.json(
       { error: 'Results not found.' },
       { status: 404 }
+    )
+  }
+
+  const storedTokenHash = String(sessionData.session_access_token_hash || '')
+
+  if (!storedTokenHash || !sessionAccessTokenMatches(sessionAccessToken, storedTokenHash)) {
+    return NextResponse.json(
+      { error: 'Invalid session authorization.' },
+      { status: 401 }
     )
   }
 
