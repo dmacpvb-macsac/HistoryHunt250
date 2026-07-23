@@ -214,7 +214,7 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_GAME_STATUS', 'Game Status must be Draft or Scheduled for importer use.', 2, 'Game Status')
     }
 
-    const validTypes: GameType[] = ['venue', 'web', 'event', 'classroom', 'community']
+    const validTypes: GameType[] = ['venue', 'community', 'web', 'music', 'kidz']
 
     if (!huntInfo.gameType) {
       addIssue(
@@ -232,7 +232,7 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
         'error',
         'Hunt Info',
         'INVALID_GAME_TYPE',
-        'Game Type must be venue, web, event, classroom, or community.',
+        'Game Type must be venue, community, web, music, or kidz.',
         2,
         'Game Type'
       )

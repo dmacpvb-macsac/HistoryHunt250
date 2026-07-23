@@ -2,7 +2,7 @@ export type ImportMode = 'draft' | 'scheduled' | 'update'
 export type ReviewStatus = 'submitted' | 'in_review' | 'changes_requested' | 'approved' | 'rejected' | 'published'
 export type ImportStatus = 'pending' | 'validated' | 'imported' | 'failed' | 'rolled_back'
 export type GameStatus = 'draft' | 'scheduled'
-export type GameType = 'venue' | 'web' | 'event' | 'classroom' | 'community'
+export type GameType = 'venue' | 'community' | 'web' | 'music' | 'kidz'
 export type CorrectChoice = 'A' | 'B' | 'C' | 'D'
 export type ResultsCtaType = 'donate' | 'learn_more' | 'sponsor' | 'merch' | 'custom'
 
