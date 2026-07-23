@@ -46,6 +46,7 @@ type HuntData = {
   questions: HuntQuestion[]
   permissions: {
     registrationRequired: boolean
+    allowAnonymousPlayers: boolean
     quizEnabled: boolean
     rewardsEnabled: boolean
   }
@@ -81,6 +82,9 @@ type CompleteResponse = {
   error?: string
 }
 
+const YOUTUBE_LYRIC_VIDEO_URL =
+  'https://www.youtube.com/watch?v=drnBrAmbNHE'
+
 export default function PlayPage({
   params,
 }: {
@@ -101,70 +105,164 @@ export default function PlayPage({
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState('')
   const [blockedMessage, setBlockedMessage] = useState('')
+  const [rememberedPlayerId, setRememberedPlayerId] = useState<string | null>(null)
+  const [rememberedPlayerName, setRememberedPlayerName] = useState('')
+  const [showIdentityChoices, setShowIdentityChoices] = useState(false)
+  const [startingGame, setStartingGame] = useState(false)
 
   useEffect(() => {
-    async function bootGame() {
+    async function loadLanding() {
       setLoading(true)
       setError('')
       setBlockedMessage('')
+      setShowIdentityChoices(false)
 
       try {
-        const playerId = localStorage.getItem('player_id')
-        const anonymousRequested = sessionStorage.getItem(`anonymous_player:${qrSlug}`) === 'true'
-
-        const response = await fetch(`/api/play/${encodeURIComponent(qrSlug)}/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ playerId, anonymous: anonymousRequested }),
-        })
+        const response = await fetch(
+          `/api/play/${encodeURIComponent(qrSlug)}/start`,
+          {
+            method: 'GET',
+            cache: 'no-store',
+          }
+        )
 
         const body = await response.json().catch(() => ({})) as StartResponse
-
-        if (response.status === 401 && body.registrationRequired) {
-          localStorage.removeItem('player_id')
-          localStorage.removeItem('player_name')
-          sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
-          router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
-          return
-        }
 
         if (!response.ok) {
           if (body.hunt) {
             setHunt(body.hunt)
           }
 
-          setBlockedMessage(body.blockedMessage || body.error || 'This History Hunt is not currently available.')
+          setBlockedMessage(
+            body.blockedMessage ||
+            body.error ||
+            'This History Hunt is not currently available.'
+          )
           setLoading(false)
           return
         }
 
-        if (!body.hunt || !body.sessionId || !body.sessionAccessToken) {
-          throw new Error('Start API returned an invalid response.')
+        if (!body.hunt) {
+          throw new Error('Game API returned an invalid response.')
         }
 
+        const storedPlayerId = localStorage.getItem('player_id')
+        const storedPlayerName = localStorage.getItem('player_name') || ''
+
+        setRememberedPlayerId(storedPlayerId)
+        setRememberedPlayerName(storedPlayerName)
         setHunt(body.hunt)
-        setSessionId(body.sessionId)
-        setSessionAccessToken(body.sessionAccessToken)
-        sessionStorage.setItem(
-          `session_access_token:${body.sessionId}`,
-          body.sessionAccessToken
-        )
-        setQuestionIndex(0)
-        setSelectedAnswer(null)
-        setAnswerFeedback(null)
-        setScore(0)
         setLoading(false)
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unable to load this History Hunt.'
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load this History Hunt.'
+
         setError(message)
         setLoading(false)
       }
     }
 
-    bootGame()
-  }, [qrSlug, router])
+    loadLanding()
+  }, [qrSlug])
+
+  async function startGame(
+    playerId: string | null,
+    anonymous: boolean
+  ) {
+    if (!hunt || startingGame) return
+
+    setStartingGame(true)
+    setError('')
+
+    try {
+      const response = await fetch(
+        `/api/play/${encodeURIComponent(qrSlug)}/start`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            playerId,
+            anonymous,
+          }),
+        }
+      )
+
+      const body = await response.json().catch(() => ({})) as StartResponse
+
+      if (response.status === 401 && body.registrationRequired) {
+        if (playerId) {
+          localStorage.removeItem('player_id')
+          localStorage.removeItem('player_name')
+          setRememberedPlayerId(null)
+          setRememberedPlayerName('')
+        }
+
+        router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          body.blockedMessage ||
+          body.error ||
+          'Unable to start this History Hunt.'
+        )
+      }
+
+      if (!body.hunt || !body.sessionId || !body.sessionAccessToken) {
+        throw new Error('Start API returned an invalid response.')
+      }
+
+      setHunt(body.hunt)
+      setSessionId(body.sessionId)
+      setSessionAccessToken(body.sessionAccessToken)
+
+      sessionStorage.setItem(
+        `session_access_token:${body.sessionId}`,
+        body.sessionAccessToken
+      )
+
+      if (anonymous) {
+        sessionStorage.setItem(`anonymous_player:${qrSlug}`, 'true')
+      } else {
+        sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
+      }
+
+      setQuestionIndex(0)
+      setSelectedAnswer(null)
+      setAnswerFeedback(null)
+      setScore(0)
+      setShowIdentityChoices(false)
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Unable to start this History Hunt.'
+
+      setError(message)
+    } finally {
+      setStartingGame(false)
+    }
+  }
+
+  async function handleStartGame() {
+    if (!hunt || startingGame) return
+
+    if (!hunt.permissions.registrationRequired) {
+      await startGame(null, false)
+      return
+    }
+
+    setShowIdentityChoices(true)
+  }
+
+  function goToRegistration() {
+    router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
+  }
 
   async function chooseAnswer(choice: 'A' | 'B' | 'C' | 'D') {
     if (!hunt || !sessionId || !sessionAccessToken || selectedAnswer || savingAnswer) return
@@ -298,10 +396,129 @@ export default function PlayPage({
     )
   }
 
-  if (!hunt || !sessionId) {
+  if (!hunt) {
     return (
       <main className="min-h-screen bg-slate-100 p-6 text-center">
         <p className="font-bold text-red-700">History Hunt unavailable.</p>
+      </main>
+    )
+  }
+
+  if (!sessionId) {
+    return (
+      <main className="min-h-screen bg-slate-100 p-4">
+        <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 text-center shadow-xl">
+          <img
+            src="/history-hunt-logo.png"
+            alt="History Hunt"
+            className="mx-auto mb-5 w-52"
+          />
+
+          <h1 className="text-3xl font-bold text-blue-900">
+            {hunt.game.title || 'History Hunt™'}
+          </h1>
+
+          <p className="mt-3 text-gray-700">
+            Listen to America 250 Proof™, then start the game.
+          </p>
+
+          <a
+            href={YOUTUBE_LYRIC_VIDEO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-8 block w-full rounded-xl bg-red-600 p-4 text-lg font-bold text-white transition hover:bg-red-700"
+          >
+            🎵 Play the Song
+          </a>
+
+          {!showIdentityChoices ? (
+            <button
+              type="button"
+              onClick={handleStartGame}
+              disabled={startingGame}
+              className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {startingGame ? 'Starting...' : 'Start the Game →'}
+            </button>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              {rememberedPlayerId ? (
+                <>
+                  <p className="font-semibold text-slate-700">
+                    Welcome back
+                    {rememberedPlayerName ? `, ${rememberedPlayerName}` : ''}.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => startGame(rememberedPlayerId, false)}
+                    disabled={startingGame}
+                    className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white disabled:bg-gray-400"
+                  >
+                    {startingGame
+                      ? 'Starting...'
+                      : `Continue${rememberedPlayerName ? ` as ${rememberedPlayerName}` : ''}`}
+                  </button>
+
+                  {hunt.permissions.allowAnonymousPlayers && (
+                    <button
+                      type="button"
+                      onClick={() => startGame(null, true)}
+                      disabled={startingGame}
+                      className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
+                    >
+                      Play Anonymously
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={goToRegistration}
+                    disabled={startingGame}
+                    className="w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white disabled:bg-gray-400"
+                  >
+                    Register to Play
+                  </button>
+
+                  {hunt.permissions.allowAnonymousPlayers && (
+                    <button
+                      type="button"
+                      onClick={() => startGame(null, true)}
+                      disabled={startingGame}
+                      className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
+                    >
+                      Play Anonymously
+                    </button>
+                  )}
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowIdentityChoices(false)}
+                disabled={startingGame}
+                className="mt-4 text-sm font-semibold text-gray-500 underline"
+              >
+                Back
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">
+              {error}
+            </div>
+          )}
+
+          <p className="mt-6 text-sm text-gray-500">
+            {hunt.questions.length} Questions
+            {hunt.game.total_points
+              ? ` • ${hunt.game.total_points} Total Points`
+              : ''}
+          </p>
+        </div>
       </main>
     )
   }
@@ -337,6 +554,17 @@ export default function PlayPage({
             <p className="text-sm font-bold text-blue-900">Lyric Clue</p>
             <p className="mt-1 text-gray-800 italic">“{question.lyric}”</p>
           </div>
+        )}
+
+        {question.is_bonus && (
+          <a
+            href={YOUTUBE_LYRIC_VIDEO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 block w-full rounded-xl bg-red-600 p-4 text-center text-lg font-bold text-white transition hover:bg-red-700"
+          >
+            🎵 Play the Song
+          </a>
         )}
 
         <h2 className="mt-6 text-xl font-bold text-slate-900">

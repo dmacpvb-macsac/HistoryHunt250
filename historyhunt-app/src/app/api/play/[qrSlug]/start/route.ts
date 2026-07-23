@@ -386,6 +386,52 @@ async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId
   }
 }
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ qrSlug: string }> }
+) {
+  const { qrSlug } = await params
+
+  try {
+    const hunt = await loadHunt(qrSlug)
+    const blockedMessage = checkAvailability(hunt.game)
+
+    if (blockedMessage) {
+      return NextResponse.json(
+        {
+          blockedMessage,
+          hunt,
+        },
+        { status: 403 }
+      )
+    }
+
+    if (!hunt.permissions.quizEnabled) {
+      return NextResponse.json(
+        {
+          blockedMessage: 'This History Hunt quiz is not currently enabled.',
+          hunt,
+        },
+        { status: 403 }
+      )
+    }
+
+    return NextResponse.json({
+      hunt,
+    })
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Unable to load this History Hunt.'
+
+    return NextResponse.json(
+      { error: message },
+      { status: 400 }
+    )
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ qrSlug: string }> }
