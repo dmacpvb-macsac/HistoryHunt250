@@ -29,6 +29,137 @@ function normalizeRpcResult(data: unknown, fallbackPayload: ReturnType<typeof bu
   }
 }
 
+type BadgeType = 'completed' | 'perfect_score'
+
+async function ensureBadgeRegistered(
+  gameSlug: string,
+  gameTitle: string,
+  badgeSlug: string,
+  badgeType: BadgeType
+) {
+  if (!gameSlug || !badgeSlug) {
+    return
+  }
+
+  const { data: existingBadge, error: existingBadgeError } = await supabaseAdmin
+    .from('badges')
+    .select('badge_id, slug, badge_type, image_url, active')
+    .eq('slug', badgeSlug)
+    .maybeSingle()
+
+  if (existingBadgeError) {
+    throw new Error(`Unable to check badge "${badgeSlug}": ${existingBadgeError.message}`)
+  }
+
+  if (existingBadge) {
+    if (existingBadge.active !== true) {
+      throw new Error(`Badge "${badgeSlug}" exists but is inactive.`)
+    }
+
+    if (existingBadge.badge_type !== badgeType) {
+      throw new Error(
+        `Badge "${badgeSlug}" has badge_type "${existingBadge.badge_type}", expected "${badgeType}".`
+      )
+    }
+
+    if (!existingBadge.image_url) {
+      throw new Error(`Badge "${badgeSlug}" exists but has no image URL.`)
+    }
+
+    return
+  }
+
+  const fileName = `${badgeSlug}.png`
+  const folder = `games/${gameSlug}`
+  const objectPath = `${folder}/${fileName}`
+
+  const { data: objects, error: storageError } = await supabaseAdmin.storage
+    .from('badges')
+    .list(folder, {
+      limit: 100,
+      search: fileName,
+    })
+
+  if (storageError) {
+    throw new Error(
+      `Unable to check badge Storage object "${objectPath}": ${storageError.message}`
+    )
+  }
+
+  const storageObject = objects?.find(object => object.name === fileName)
+
+  if (!storageObject) {
+    throw new Error(
+      `Badge "${badgeSlug}" is not registered and canonical Storage object "${objectPath}" was not found.`
+    )
+  }
+
+  const { data: publicUrlData } = supabaseAdmin.storage
+    .from('badges')
+    .getPublicUrl(objectPath)
+
+  const imageUrl = publicUrlData.publicUrl
+
+  if (!imageUrl) {
+    throw new Error(`Unable to create public URL for badge "${badgeSlug}".`)
+  }
+
+  const badgeLabel =
+    badgeType === 'completed'
+      ? 'Completion Badge'
+      : 'Perfect Score Badge'
+
+  const altText =
+    badgeType === 'completed'
+      ? `${gameTitle} completion badge`
+      : `${gameTitle} perfect score badge`
+
+  const description =
+    badgeType === 'completed'
+      ? `Awarded for completing the ${gameTitle}.`
+      : `Awarded for earning a perfect score on the ${gameTitle}.`
+
+  const { error: insertError } = await supabaseAdmin
+    .from('badges')
+    .insert({
+      slug: badgeSlug,
+      title: `${gameTitle} ${badgeLabel}`,
+      description,
+      badge_type: badgeType,
+      image_url: imageUrl,
+      active: true,
+      alt_text: altText,
+      is_default: false,
+    })
+
+  if (insertError && insertError.code !== '23505') {
+    throw new Error(`Unable to register badge "${badgeSlug}": ${insertError.message}`)
+  }
+
+  // Re-read after insert / concurrent insert so validation is deterministic.
+  const { data: registeredBadge, error: registeredBadgeError } = await supabaseAdmin
+    .from('badges')
+    .select('badge_id, slug, badge_type, image_url, active')
+    .eq('slug', badgeSlug)
+    .maybeSingle()
+
+  if (registeredBadgeError || !registeredBadge) {
+    throw new Error(
+      `Badge "${badgeSlug}" could not be verified after registration.`
+    )
+  }
+
+  if (
+    registeredBadge.active !== true ||
+    registeredBadge.badge_type !== badgeType ||
+    !registeredBadge.image_url
+  ) {
+    throw new Error(
+      `Badge "${badgeSlug}" failed validation after registration.`
+    )
+  }
+}
+
 function isAuthorized(request: NextRequest) {
   const expectedToken = process.env.ADMIN_IMPORT_TOKEN
 
@@ -62,6 +193,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const payload = buildImportPreviewPayload(input)
+
+    const gameSlug = String(payload.huntInfo.game_slug || '')
+    const gameTitle = String(payload.huntInfo.title || 'History Hunt')
+    const completionBadgeSlug = String(payload.huntInfo.completion_badge_slug || '')
+    const perfectBadgeSlug = String(payload.huntInfo.perfect_score_badge_slug || '')
+
+    // Explicit game-specific badge slugs may be auto-registered from their
+    // canonical Storage objects. Blank badge fields continue to use the
+    // default badges inside import_engineering_workbook.
+    if (completionBadgeSlug) {
+      await ensureBadgeRegistered(
+        gameSlug,
+        gameTitle,
+        completionBadgeSlug,
+        'completed'
+      )
+    }
+
+    if (perfectBadgeSlug) {
+      await ensureBadgeRegistered(
+        gameSlug,
+        gameTitle,
+        perfectBadgeSlug,
+        'perfect_score'
+      )
+    }
 
     const { data, error } = await supabaseAdmin.rpc('import_engineering_workbook', {
       payload,
