@@ -44,14 +44,55 @@ const ALLOWED_ORIGINS = new Set([
   'https://www.historyhuntgames.com',
 ])
 
+const NON_VENUE_GAME_TYPES = new Set([
+  'web',
+  'music',
+  'community',
+  'kidz',
+])
+
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') || ''
 
   return {
     'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : '',
-    'Vary': 'Origin',
+    Vary: 'Origin',
     'Cache-Control': 'no-store',
   }
+}
+
+function isValidDateWindow(
+  startsAt: string | null,
+  endsAt: string | null,
+  nowMs: number
+) {
+  if (startsAt) {
+    const startMs = Date.parse(startsAt)
+    if (!Number.isFinite(startMs) || nowMs < startMs) return false
+  }
+
+  if (endsAt) {
+    const endMs = Date.parse(endsAt)
+    if (!Number.isFinite(endMs) || nowMs > endMs) return false
+  }
+
+  return true
+}
+
+function isNonVenueGamePlayableNow(
+  game: GameRow,
+  questionCount: number,
+  nowMs: number
+) {
+  const status = (game.status || '').trim().toLowerCase()
+
+  return (
+    game.active === true &&
+    status === 'active' &&
+    Boolean(game.slug?.trim()) &&
+    questionCount > 0 &&
+    isValidDateWindow(game.starts_at, game.ends_at, nowMs)
+  )
 }
 
 export async function GET(request: Request) {
@@ -95,8 +136,9 @@ export async function GET(request: Request) {
   const venueByQrSlug = new Map<string, VenueRow>()
 
   for (const venue of venues) {
-    if (!venue.qr_slug) continue
-    venueByQrSlug.set(venue.qr_slug, venue)
+    const qrSlug = venue.qr_slug?.trim()
+    if (!qrSlug) continue
+    venueByQrSlug.set(qrSlug, venue)
   }
 
   const questionCountByGameId = new Map<string, number>()
@@ -110,31 +152,55 @@ export async function GET(request: Request) {
     )
   }
 
-  const currentGames = games.flatMap(game => {
-    const publicPlayQrSlug = game.public_play_url
-      ? game.public_play_url.split('/').filter(Boolean).pop() || ''
-      : ''
+  const nowMs = Date.now()
 
-    const qrSlug = publicPlayQrSlug || game.slug || ''
-    const venue = qrSlug ? venueByQrSlug.get(qrSlug) || null : null
+  const currentGames = games.flatMap(game => {
+    const gameSlug = game.slug?.trim() || ''
+    const gameType = game.game_type?.trim().toLowerCase() || ''
+
+    if (!gameSlug) return []
 
     const questionCount = questionCountByGameId.get(game.game_id) || 0
-    const playable = evaluatePlayableNow(game, venue, questionCount)
+    const venue =
+      gameType === 'venue'
+        ? venueByQrSlug.get(gameSlug) || null
+        : null
 
-    if (!playable.playableNow || !venue?.qr_slug) {
-      return []
+    let playableNow = false
+
+    if (gameType === 'venue') {
+      playableNow = evaluatePlayableNow(
+        game,
+        venue,
+        questionCount
+      ).playableNow
+    } else if (NON_VENUE_GAME_TYPES.has(gameType)) {
+      playableNow = isNonVenueGamePlayableNow(
+        game,
+        questionCount,
+        nowMs
+      )
     }
+
+    if (!playableNow) return []
+
+    // Only venue games require a matching venue / QR record.
+    if (gameType === 'venue' && !venue?.qr_slug) return []
 
     return [{
       title: game.title || '',
-      gameSlug: game.slug || '',
-      gameType: game.game_type || '',
-      qrSlug,
-      venueName: venue.name || '',
+      gameSlug,
+      gameType,
+      qrSlug: gameSlug,
+      venueName: gameType === 'venue' ? venue?.name || '' : '',
       publicPlayUrl:
-        `https://play.historyhuntgames.com/play/${encodeURIComponent(qrSlug)}`,
-      startsAt: game.starts_at || venue.start_at || null,
-      endsAt: game.ends_at || venue.end_at || null,
+        `https://play.historyhuntgames.com/play/${encodeURIComponent(gameSlug)}`,
+      startsAt:
+        game.starts_at ||
+        (gameType === 'venue' ? venue?.start_at || null : null),
+      endsAt:
+        game.ends_at ||
+        (gameType === 'venue' ? venue?.end_at || null : null),
     }]
   })
 
