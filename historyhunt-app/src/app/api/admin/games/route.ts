@@ -10,6 +10,7 @@ type GameRow = {
   campaign_id: string | null
   slug: string | null
   title: string | null
+  game_type: string | null
   status: string | null
   active: boolean | null
   starts_at: string | null
@@ -87,6 +88,13 @@ function isAuthorized(request: NextRequest) {
   return Boolean(providedToken) && providedToken === expectedToken
 }
 
+const NON_VENUE_GAME_TYPES = new Set([
+  'community',
+  'web',
+  'music',
+  'kidz',
+])
+
 function asArray<T>(value: T[] | null) {
   return Array.isArray(value) ? value : []
 }
@@ -114,7 +122,7 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabaseAdmin
       .from('games')
-      .select('game_id, campaign_id, slug, title, status, active, starts_at, ends_at, registration_required, allow_anonymous_players, question_count, total_points, participant_badge_url, perfect_score_badge_url, public_play_url, share_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note, created_at, updated_at')
+      .select('game_id, campaign_id, slug, title, game_type, status, active, starts_at, ends_at, registration_required, allow_anonymous_players, question_count, total_points, participant_badge_url, perfect_score_badge_url, public_play_url, share_url, share_title, share_text, badge_share_enabled, badge_download_enabled, results_cta_enabled, results_cta_type, results_cta_label, results_cta_url, results_cta_note, created_at, updated_at')
       .order('created_at', { ascending: false }),
 
     supabaseAdmin
@@ -178,12 +186,18 @@ export async function GET(request: NextRequest) {
   const rows = games.map(game => {
     const campaign = game.campaign_id ? campaignById.get(game.campaign_id) || null : null
 
+    const gameType = (game.game_type || '').trim().toLowerCase()
+    const venueRequired = !NON_VENUE_GAME_TYPES.has(gameType)
+
     const publicPlayQrSlug = game.public_play_url
       ? game.public_play_url.split('/').filter(Boolean).pop() || ''
       : ''
 
     const qrSlug = publicPlayQrSlug || game.slug || ''
-    const venue = qrSlug ? venueByQrSlug.get(qrSlug) || null : null
+    const venue =
+      venueRequired && qrSlug
+        ? venueByQrSlug.get(qrSlug) || null
+        : null
 
     const gameQuestions = questionsByGameId.get(game.game_id) || []
     const activeQuestions = gameQuestions.filter(question => question.active !== false)
@@ -214,7 +228,9 @@ export async function GET(request: NextRequest) {
 
     const publicPlayUrl =
       game.public_play_url ||
-      (venue?.qr_slug ? `${playBaseUrl.replace(/\/$/, '')}/play/${venue.qr_slug}` : '')
+      (qrSlug
+        ? `${playBaseUrl.replace(/\/$/, '')}/play/${encodeURIComponent(qrSlug)}`
+        : '')
 
     const hasBadgeConfig = Boolean(
       game.participant_badge_url ||
@@ -235,19 +251,25 @@ export async function GET(request: NextRequest) {
       game.results_cta_url
     )
 
-    const playable = evaluatePlayableNow(game, venue, questionCount)
+    const playable = evaluatePlayableNow(game, venue, questionCount, {
+      gameType,
+      qrSlug,
+      venueRequired,
+    })
 
     return {
       gameId: game.game_id,
       title: game.title || '',
       gameSlug: game.slug || '',
-      qrSlug: venue?.qr_slug || '',
+      gameType,
+      qrSlug,
       publicPlayUrl,
       status: game.status || '',
       active: Boolean(game.active),
       campaignTitle: campaign?.title || '',
       campaignSlug: campaign?.slug || '',
       venueName: venue?.name || '',
+      venueRequired,
       registrationRequired: Boolean(game.registration_required),
       allowAnonymousPlayers: game.allow_anonymous_players !== false,
       startsAt: game.starts_at || venue?.start_at || null,

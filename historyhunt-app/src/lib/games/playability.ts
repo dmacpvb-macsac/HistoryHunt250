@@ -13,6 +13,12 @@ export type PlayabilityVenue = {
   end_at: string | null
 }
 
+export type PlayabilityOptions = {
+  gameType?: string | null
+  qrSlug?: string | null
+  venueRequired?: boolean
+}
+
 function firstValidDate(...values: Array<string | null | undefined>) {
   for (const value of values) {
     if (!value) continue
@@ -41,33 +47,48 @@ function formatDuration(ms: number) {
 export function evaluatePlayableNow(
   game: PlayabilityGame,
   venue: PlayabilityVenue | null,
-  questionCount: number
+  questionCount: number,
+  options: PlayabilityOptions = {}
 ) {
-  if (!venue) {
+  const gameType = (options.gameType || '').trim().toLowerCase()
+  const venueRequired =
+    options.venueRequired ?? (gameType ? gameType === 'venue' : true)
+  const qrSlug = (options.qrSlug || venue?.qr_slug || '').trim()
+
+  if (!qrSlug) {
     return {
       playableNow: false,
-      reasonNotPlayable: 'No venue / QR slug linked to this campaign.',
+      reasonNotPlayable: 'No QR slug is assigned to this game.',
     }
   }
 
-  if (!venue.qr_slug) {
-    return {
-      playableNow: false,
-      reasonNotPlayable: 'Venue has no QR slug.',
+  if (venueRequired) {
+    if (!venue) {
+      return {
+        playableNow: false,
+        reasonNotPlayable: 'This venue game has no venue linked to its QR slug.',
+      }
     }
-  }
 
-  if (venue.active === false) {
-    return {
-      playableNow: false,
-      reasonNotPlayable: 'Venue is inactive.',
+    if (!venue.qr_slug) {
+      return {
+        playableNow: false,
+        reasonNotPlayable: 'Venue has no QR slug.',
+      }
     }
-  }
 
-  if (venue.quiz_enabled === false) {
-    return {
-      playableNow: false,
-      reasonNotPlayable: 'Venue quiz is disabled.',
+    if (venue.active === false) {
+      return {
+        playableNow: false,
+        reasonNotPlayable: 'Venue is inactive.',
+      }
+    }
+
+    if (venue.quiz_enabled === false) {
+      return {
+        playableNow: false,
+        reasonNotPlayable: 'Venue quiz is disabled.',
+      }
     }
   }
 
@@ -109,8 +130,14 @@ export function evaluatePlayableNow(
   }
 
   const now = Date.now()
-  const startDate = firstValidDate(game.starts_at, venue.start_at)
-  const endDate = firstValidDate(game.ends_at, venue.end_at)
+  const startDate = firstValidDate(
+    game.starts_at,
+    venueRequired ? venue?.start_at : null
+  )
+  const endDate = firstValidDate(
+    game.ends_at,
+    venueRequired ? venue?.end_at : null
+  )
 
   if (startDate && startDate.getTime() > now) {
     return {

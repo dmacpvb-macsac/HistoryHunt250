@@ -6,6 +6,7 @@ type AdminGameRow = {
   gameId: string
   title: string
   gameSlug: string
+  gameType: string
   qrSlug: string
   publicPlayUrl: string
   status: string
@@ -13,6 +14,7 @@ type AdminGameRow = {
   campaignTitle: string
   campaignSlug: string
   venueName: string
+  venueRequired: boolean
   registrationRequired: boolean
   allowAnonymousPlayers: boolean
   startsAt: string | null
@@ -103,6 +105,22 @@ function healthClass(value: boolean) {
   return value
     ? 'bg-green-100 text-green-800 border-green-200'
     : 'bg-red-100 text-red-800 border-red-200'
+}
+
+function slugStatus(gameSlug: string, qrSlug: string) {
+  if (!qrSlug) return 'Missing'
+  if (!gameSlug) return 'Game slug missing'
+  return gameSlug === qrSlug ? 'Match' : 'Different'
+}
+
+function slugStatusClass(gameSlug: string, qrSlug: string) {
+  if (!qrSlug || !gameSlug) {
+    return 'bg-red-100 text-red-800 border-red-200'
+  }
+
+  return gameSlug === qrSlug
+    ? 'bg-green-100 text-green-800 border-green-200'
+    : 'bg-yellow-100 text-yellow-800 border-yellow-200'
 }
 
 function Pill({
@@ -358,16 +376,24 @@ export default function AdminGamesPage() {
                               {game.title || 'Untitled game'}
                             </div>
                             <div className="mt-1 text-xs text-gray-500">
+                              Game type: <span className="font-mono">{game.gameType || '—'}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">
                               Game slug: <span className="font-mono">{game.gameSlug || '—'}</span>
                             </div>
                             <div className="mt-1 text-xs text-gray-500">
                               QR slug: <span className="font-mono">{game.qrSlug || '—'}</span>
                             </div>
+                            <div className="mt-2">
+                              <Pill className={slugStatusClass(game.gameSlug, game.qrSlug)}>
+                                Slugs: {slugStatus(game.gameSlug, game.qrSlug)}
+                              </Pill>
+                            </div>
                             <div className="mt-2 text-xs text-gray-600">
                               Campaign: {game.campaignTitle || game.campaignSlug || '—'}
                             </div>
                             <div className="text-xs text-gray-600">
-                              Venue: {game.venueName || '—'}
+                              Venue: {game.venueRequired ? game.venueName || 'Missing' : 'Not required'}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {game.publicPlayUrl ? (

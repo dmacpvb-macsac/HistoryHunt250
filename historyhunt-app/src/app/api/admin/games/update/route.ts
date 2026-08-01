@@ -13,6 +13,13 @@ const ALLOWED_STATUSES = new Set([
   'archived',
 ])
 
+const NON_VENUE_GAME_TYPES = new Set([
+  'community',
+  'web',
+  'music',
+  'kidz',
+])
+
 function isAuthorized(request: NextRequest) {
   const expectedToken = process.env.ADMIN_IMPORT_TOKEN
 
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
 
   const { data: game, error: gameError } = await supabaseAdmin
     .from('games')
-    .select('game_id, campaign_id, slug, public_play_url')
+    .select('game_id, campaign_id, slug, game_type, public_play_url')
     .eq('game_id', gameId)
     .maybeSingle()
 
@@ -94,6 +101,8 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date().toISOString()
+  const gameType = String(game.game_type || '').trim().toLowerCase()
+  const venueRequired = !NON_VENUE_GAME_TYPES.has(gameType)
   const commonGameFields = {
     updated_at: now,
     updated_by: 'admin-games-dashboard',
@@ -213,6 +222,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (!venueRequired) {
+    venueUpdate = null
+  }
+
   if (gameUpdate) {
     const { error: updateGameError } = await supabaseAdmin
       .from('games')
@@ -236,7 +249,7 @@ export async function POST(request: NextRequest) {
 
     if (!qrSlug) {
       return NextResponse.json(
-        { error: 'Unable to determine venue QR slug for this game.' },
+        { error: 'Unable to determine venue QR slug for this venue game.' },
         { status: 500 }
       )
     }
