@@ -243,6 +243,13 @@ export async function POST(request: NextRequest) {
     const gameType = String(payload.huntInfo.game_type || '')
     const completionBadgeSlug = String(payload.huntInfo.completion_badge_slug || '')
     const perfectBadgeSlug = String(payload.huntInfo.perfect_score_badge_slug || '')
+    const isSharedStateBadge = SHARED_BADGE_GAME_TYPES.has(gameType)
+
+    if (isSharedStateBadge && !completionBadgeSlug) {
+      throw new Error(
+        'Community games require a shared state or territory Completion Badge Slug.'
+      )
+    }
 
     // Explicit game-specific badge slugs may be auto-registered from their
     // canonical Storage objects. Blank badge fields continue to use the
@@ -252,7 +259,9 @@ export async function POST(request: NextRequest) {
     // games fall back to the default badge set if their badge is missing,
     // rather than failing the import. ensureBadgeRegistered() returns the
     // slug that should actually be written to the game record, which may
-    // differ from the input slug if a fallback badge was used.
+    // differ from the input slug if a fallback badge was used. Community
+    // games always clear the perfect-score slug; the database policy trigger
+    // also enforces a NULL perfect_score_badge_id as a final safeguard.
     if (completionBadgeSlug) {
       payload.huntInfo.completion_badge_slug = await ensureBadgeRegistered(
         gameSlug,
@@ -263,7 +272,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (perfectBadgeSlug) {
+    if (isSharedStateBadge) {
+      payload.huntInfo.perfect_score_badge_slug = null
+    } else if (perfectBadgeSlug) {
       payload.huntInfo.perfect_score_badge_slug = await ensureBadgeRegistered(
         gameSlug,
         gameTitle,

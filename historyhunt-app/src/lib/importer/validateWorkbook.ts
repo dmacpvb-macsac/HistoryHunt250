@@ -98,7 +98,7 @@ function parseHuntInfo(row: Record<string, unknown>): HuntInfo {
     countdownEnabled: boolValue(row, false, 'Countdown Enabled'),
     leaderboardEnabled: boolValue(row, false, 'Leaderboard Enabled'),
     registrationRequired: boolValue(row, true, 'Registration Required'),
-    allowAnonymousPlayers: boolValue(row, true, 'Allow Anonymous Players'),
+    allowAnonymousPlayers: boolValue(row, false, 'Allow Anonymous Players'),
     badgeEnabled: boolValue(row, true, 'Badge Enabled'),
     completionBadgeSlug: value(row, 'Completion Badge Slug'),
     perfectScoreBadgeSlug: value(row, 'Perfect Score Badge Slug'),
@@ -298,12 +298,62 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(warnings, 'warning', 'Hunt Info', 'MISSING_SHARE_URL', 'Share URL is blank; Public Play URL can be used as fallback.', 2, 'Share URL')
     }
 
-    if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
-      addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_COMPLETION_BADGE', 'Completion Badge Slug is blank; importer will use default-completed.', 2, 'Completion Badge Slug')
+    if (!huntInfo.registrationRequired) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'REGISTRATION_REQUIRED',
+        'Registration Required must be Yes. V1.5 requires player registration for every game.',
+        2,
+        'Registration Required'
+      )
     }
 
-    if (huntInfo.badgeEnabled && !huntInfo.perfectScoreBadgeSlug) {
-      addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_PERFECT_BADGE', 'Perfect Score Badge Slug is blank; importer will use default-perfect.', 2, 'Perfect Score Badge Slug')
+    if (huntInfo.allowAnonymousPlayers) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'ANONYMOUS_PLAY_DISABLED',
+        'Allow Anonymous Players must be No. V1.5 requires player data capture for every game.',
+        2,
+        'Allow Anonymous Players'
+      )
+    }
+
+    if (huntInfo.gameType === 'community') {
+      if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
+        addIssue(
+          errors,
+          'error',
+          'Hunt Info',
+          'COMMUNITY_COMPLETION_BADGE_REQUIRED',
+          'Community games require a shared state or territory Completion Badge Slug.',
+          2,
+          'Completion Badge Slug'
+        )
+      }
+
+      if (huntInfo.perfectScoreBadgeSlug) {
+        addIssue(
+          errors,
+          'error',
+          'Hunt Info',
+          'COMMUNITY_PERFECT_BADGE_NOT_ALLOWED',
+          'Community games use only the shared completion badge. Perfect Score Badge Slug must be blank.',
+          2,
+          'Perfect Score Badge Slug'
+        )
+      }
+    } else {
+      if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
+        addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_COMPLETION_BADGE', 'Completion Badge Slug is blank; importer will use default-completed.', 2, 'Completion Badge Slug')
+      }
+
+      if (huntInfo.badgeEnabled && !huntInfo.perfectScoreBadgeSlug) {
+        addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_PERFECT_BADGE', 'Perfect Score Badge Slug is blank; importer will use default-perfect.', 2, 'Perfect Score Badge Slug')
+      }
     }
   }
 
