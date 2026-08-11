@@ -87,8 +87,17 @@ function publicCampaignFields(campaign: Record<string, unknown> | null) {
   }
 }
 
+const NON_VENUE_GAME_TYPES = new Set([
+  'web',
+  'music',
+  'community',
+  'kidz',
+])
+
+const WEB_GAMES_VENUE_SLUG = 'web-games'
+
 async function loadHunt(qrSlug: string) {
-  // Frozen 1.x rule: resolve the game directly by games.slug.
+  // KISS rule: the URL slug identifies the game. Always.
   const gameSelect = `
     game_id,
     campaign_id,
@@ -126,42 +135,56 @@ async function loadHunt(qrSlug: string) {
     .maybeSingle()
 
   if (gameError || !game) {
-    throw new Error(`No active game found for QR slug: ${qrSlug}`)
+    throw new Error(`No active game found for slug: ${qrSlug}`)
   }
 
   const gameRecord = game as Record<string, unknown>
+  const gameType = String(gameRecord.game_type || '').trim().toLowerCase()
+  const isVenueGame = gameType === 'venue'
 
-  // 1.x still keeps a physical/logical venue entry aligned to the canonical slug.
-  // The venue provides entry-point/session context, but it does NOT select the game.
-  const { data: venueRaw, error: venueError } = await supabaseAdmin
+  if (!isVenueGame && !NON_VENUE_GAME_TYPES.has(gameType)) {
+    throw new Error(`Unsupported game type for ${qrSlug}: ${gameType || 'blank'}`)
+  }
+
+  const venueSelect = `
+    venue_id,
+    slug,
+    name,
+    city,
+    state,
+    qr_slug,
+    active,
+    registration_enabled,
+    quiz_enabled,
+    reward_enabled,
+    campaign_id
+  `
+
+  // Venue games use their real venue keyed by the game slug.
+  // Every non-venue game shares one logical Web Games venue for session plumbing.
+  const venueQuery = supabaseAdmin
     .from('venues')
-    .select(`
-      venue_id,
-      slug,
-      name,
-      city,
-      state,
-      qr_slug,
-      active,
-      registration_enabled,
-      quiz_enabled,
-      reward_enabled,
-      campaign_id
-    `)
-    .eq('qr_slug', qrSlug)
+    .select(venueSelect)
     .eq('active', true)
-    .maybeSingle()
+
+  const { data: venueRaw, error: venueError } = isVenueGame
+    ? await venueQuery.eq('qr_slug', qrSlug).maybeSingle()
+    : await venueQuery.eq('slug', WEB_GAMES_VENUE_SLUG).maybeSingle()
 
   if (venueError || !venueRaw) {
-    throw new Error(`No active venue found for QR slug: ${qrSlug}`)
+    throw new Error(
+      isVenueGame
+        ? `No active venue found for venue game: ${qrSlug}`
+        : `No active Web Games venue found (${WEB_GAMES_VENUE_SLUG})`
+    )
   }
 
   const venueRecord = venueRaw as Record<string, unknown>
 
-  // Campaign is optional metadata/grouping only. It must never block game loading.
+  // Campaign is optional metadata only. It never identifies or blocks the game.
   let campaign: Record<string, unknown> | null = null
   const campaignId = String(
-    gameRecord.campaign_id || venueRecord.campaign_id || ''
+    gameRecord.campaign_id || (isVenueGame ? venueRecord.campaign_id : '') || ''
   ).trim()
 
   if (campaignId) {
@@ -206,7 +229,7 @@ async function loadHunt(qrSlug: string) {
     throw new Error(`Questions not found for game: ${gameRecord.slug}`)
   }
 
-  // Frozen 1.x identity matrix is controlled by the game flags.
+  // Player-entry behavior belongs to the game.
   const registrationRequired = Boolean(gameRecord.registration_required)
   const allowAnonymousPlayers = gameRecord.allow_anonymous_players !== false
 
@@ -220,8 +243,10 @@ async function loadHunt(qrSlug: string) {
     permissions: {
       registrationRequired,
       allowAnonymousPlayers,
-      quizEnabled: venueRecord.quiz_enabled !== false,
-      rewardsEnabled: venueRecord.reward_enabled !== false,
+
+      // A logical Web Games venue is plumbing, not a feature gate.
+      quizEnabled: isVenueGame ? venueRecord.quiz_enabled !== false : true,
+      rewardsEnabled: isVenueGame ? venueRecord.reward_enabled !== false : true,
     },
   }
 }
