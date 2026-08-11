@@ -11,11 +11,6 @@ type StartRequestBody = {
   anonymous?: boolean | null
 }
 
-function normalizeCampaign(value: unknown) {
-  if (Array.isArray(value)) return value[0] || null
-  return value || null
-}
-
 function sanitizeQuestion(question: Record<string, unknown>) {
   return {
     question_id: String(question.question_id || ''),
@@ -37,8 +32,10 @@ function sanitizeQuestion(question: Record<string, unknown>) {
 function publicGameFields(game: Record<string, unknown>) {
   return {
     game_id: String(game.game_id || ''),
+    campaign_id: game.campaign_id ? String(game.campaign_id) : null,
     slug: String(game.slug || ''),
     title: String(game.title || ''),
+    game_type: game.game_type ? String(game.game_type) : '',
     description: game.description ? String(game.description) : '',
     state: game.state ? String(game.state) : '',
     city: game.city ? String(game.city) : '',
@@ -91,45 +88,7 @@ function publicCampaignFields(campaign: Record<string, unknown> | null) {
 }
 
 async function loadHunt(qrSlug: string) {
-  const { data: venueRaw, error: venueError } = await supabaseAdmin
-    .from('venues')
-    .select(`
-      venue_id,
-      slug,
-      name,
-      city,
-      state,
-      qr_slug,
-      active,
-      registration_enabled,
-      quiz_enabled,
-      reward_enabled,
-      campaign_id,
-      campaigns (
-        campaign_id,
-        slug,
-        title,
-        active
-      )
-    `)
-    .eq('qr_slug', qrSlug)
-    .eq('active', true)
-    .maybeSingle()
-
-  if (venueError || !venueRaw) {
-    throw new Error(`No active venue found for QR slug: ${qrSlug}`)
-  }
-
-  const venueRecord = venueRaw as Record<string, unknown>
-  const campaign = normalizeCampaign(venueRecord.campaigns) as Record<string, unknown> | null
-
-  if (!campaign) {
-    throw new Error(`No campaign found for QR slug: ${qrSlug}`)
-  }
-
-  const canonicalPlayUrl =
-    `https://play.historyhuntgames.com/play/${qrSlug}`
-
+  // Frozen 1.x rule: resolve the game directly by games.slug.
   const gameSelect = `
     game_id,
     campaign_id,
@@ -138,6 +97,7 @@ async function loadHunt(qrSlug: string) {
     description,
     state,
     city,
+    game_type,
     question_count,
     total_points,
     participant_badge_url,
@@ -171,6 +131,56 @@ async function loadHunt(qrSlug: string) {
 
   const gameRecord = game as Record<string, unknown>
 
+  // 1.x still keeps a physical/logical venue entry aligned to the canonical slug.
+  // The venue provides entry-point/session context, but it does NOT select the game.
+  const { data: venueRaw, error: venueError } = await supabaseAdmin
+    .from('venues')
+    .select(`
+      venue_id,
+      slug,
+      name,
+      city,
+      state,
+      qr_slug,
+      active,
+      registration_enabled,
+      quiz_enabled,
+      reward_enabled,
+      campaign_id
+    `)
+    .eq('qr_slug', qrSlug)
+    .eq('active', true)
+    .maybeSingle()
+
+  if (venueError || !venueRaw) {
+    throw new Error(`No active venue found for QR slug: ${qrSlug}`)
+  }
+
+  const venueRecord = venueRaw as Record<string, unknown>
+
+  // Campaign is optional metadata/grouping only. It must never block game loading.
+  let campaign: Record<string, unknown> | null = null
+  const campaignId = String(
+    gameRecord.campaign_id || venueRecord.campaign_id || ''
+  ).trim()
+
+  if (campaignId) {
+    const { data: campaignRaw, error: campaignError } = await supabaseAdmin
+      .from('campaigns')
+      .select('campaign_id, slug, title, active')
+      .eq('campaign_id', campaignId)
+      .maybeSingle()
+
+    if (campaignError) {
+      console.warn(
+        `Unable to load optional campaign metadata for game ${qrSlug}:`,
+        campaignError
+      )
+    } else if (campaignRaw) {
+      campaign = campaignRaw as Record<string, unknown>
+    }
+  }
+
   const { data: questions, error: questionsError } = await supabaseAdmin
     .from('questions')
     .select(`
@@ -196,16 +206,17 @@ async function loadHunt(qrSlug: string) {
     throw new Error(`Questions not found for game: ${gameRecord.slug}`)
   }
 
-  const { campaigns: _campaigns, ...venueWithoutCampaign } = venueRecord
-
-  const registrationRequired = Boolean(gameRecord.registration_required) || Boolean(venueRecord.registration_enabled)
+  // Frozen 1.x identity matrix is controlled by the game flags.
+  const registrationRequired = Boolean(gameRecord.registration_required)
   const allowAnonymousPlayers = gameRecord.allow_anonymous_players !== false
 
   return {
-    venue: publicVenueFields(venueWithoutCampaign),
+    venue: publicVenueFields(venueRecord),
     campaign: publicCampaignFields(campaign),
     game: publicGameFields(gameRecord),
-    questions: questions.map((question) => sanitizeQuestion(question as Record<string, unknown>)),
+    questions: questions.map((question) =>
+      sanitizeQuestion(question as Record<string, unknown>)
+    ),
     permissions: {
       registrationRequired,
       allowAnonymousPlayers,
@@ -352,7 +363,7 @@ async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId
     .from('sessions')
     .insert({
       player_id: playerId,
-      campaign_id: hunt.campaign?.campaign_id || null,
+      campaign_id: hunt.game.campaign_id || hunt.campaign?.campaign_id || null,
       venue_id: hunt.venue.venue_id,
       game_id: hunt.game.game_id,
       score: 0,
