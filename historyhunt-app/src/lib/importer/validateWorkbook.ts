@@ -181,10 +181,6 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       ['gameSlug', 'Game Slug'],
       ['qrSlug', 'QR Slug'],
       ['huntTitle', 'Hunt Title'],
-      ['state', 'State'],
-      ['city', 'City'],
-      ['venueName', 'Venue Name'],
-      ['campaignName', 'Campaign Name'],
     ]
 
     for (const [key, label] of requiredHuntFields) {
@@ -201,6 +197,22 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_QR_SLUG', 'QR Slug must be URL-safe, for example america-250-behind-the-lyrics.', 2, 'QR Slug')
     }
 
+    if (
+      huntInfo.gameSlug &&
+      huntInfo.qrSlug &&
+      huntInfo.gameSlug !== huntInfo.qrSlug
+    ) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'SLUG_MISMATCH',
+        'Game Slug and QR Slug must match.',
+        2,
+        'QR Slug'
+      )
+    }
+
     if (huntInfo.completionBadgeSlug && !slugSafe(huntInfo.completionBadgeSlug)) {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_COMPLETION_BADGE_SLUG', 'Completion Badge Slug must contain lowercase letters, numbers, and hyphens only.', 2, 'Completion Badge Slug')
     }
@@ -215,6 +227,18 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
     }
 
     const validTypes: GameType[] = ['venue', 'community', 'web', 'music', 'kidz']
+
+    if (huntInfo.gameType === 'venue' && !huntInfo.venueName) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'VENUE_NAME_REQUIRED',
+        'Venue Name is required for venue games.',
+        2,
+        'Venue Name'
+      )
+    }
 
     if (!huntInfo.gameType) {
       addIssue(
@@ -298,29 +322,6 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(warnings, 'warning', 'Hunt Info', 'MISSING_SHARE_URL', 'Share URL is blank; Public Play URL can be used as fallback.', 2, 'Share URL')
     }
 
-    if (!huntInfo.registrationRequired) {
-      addIssue(
-        errors,
-        'error',
-        'Hunt Info',
-        'REGISTRATION_REQUIRED',
-        'Registration Required must be Yes. V1.5 requires player registration for every game.',
-        2,
-        'Registration Required'
-      )
-    }
-
-    if (huntInfo.allowAnonymousPlayers) {
-      addIssue(
-        errors,
-        'error',
-        'Hunt Info',
-        'ANONYMOUS_PLAY_DISABLED',
-        'Allow Anonymous Players must be No. V1.5 requires player data capture for every game.',
-        2,
-        'Allow Anonymous Players'
-      )
-    }
 
     if (huntInfo.gameType === 'community') {
       if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
