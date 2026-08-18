@@ -119,7 +119,9 @@ export default function ResultsPage({
     loadResults()
   }, [sessionId])
 
-  useEffect(() => {
+    useEffect(() => {
+    // Browser share support can only be determined after client mounting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNativeShareSupported(
       typeof navigator !== 'undefined' &&
         typeof navigator.share === 'function'

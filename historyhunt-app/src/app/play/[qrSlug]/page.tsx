@@ -107,7 +107,6 @@ export default function PlayPage({
   const [blockedMessage, setBlockedMessage] = useState('')
   const [rememberedPlayerId, setRememberedPlayerId] = useState<string | null>(null)
   const [rememberedPlayerName, setRememberedPlayerName] = useState('')
-  const [showIdentityChoices, setShowIdentityChoices] = useState(false)
   const [startingGame, setStartingGame] = useState(false)
 
   useEffect(() => {
@@ -115,7 +114,6 @@ export default function PlayPage({
       setLoading(true)
       setError('')
       setBlockedMessage('')
-      setShowIdentityChoices(false)
 
       try {
         const response = await fetch(
@@ -152,6 +150,16 @@ export default function PlayPage({
         setRememberedPlayerId(storedPlayerId)
         setRememberedPlayerName(storedPlayerName)
         setHunt(body.hunt)
+
+        const pendingPlayerId = sessionStorage.getItem(
+          `start_after_registration:${qrSlug}`
+        )
+
+        if (pendingPlayerId) {
+          sessionStorage.removeItem(`start_after_registration:${qrSlug}`)
+          await startGame(pendingPlayerId, false, body.hunt)
+        }
+
         setLoading(false)
       } catch (err: unknown) {
         const message =
@@ -164,14 +172,20 @@ export default function PlayPage({
       }
     }
 
-    loadLanding()
+       loadLanding()
+
+    // Registration handoff must run only once when this game slug loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrSlug])
 
   async function startGame(
     playerId: string | null,
-    anonymous: boolean
+    anonymous: boolean,
+    loadedHunt?: HuntData
   ) {
-    if (!hunt || startingGame) return
+    const activeHunt = loadedHunt || hunt
+
+    if (!activeHunt || startingGame) return
 
     setStartingGame(true)
     setError('')
@@ -236,7 +250,6 @@ export default function PlayPage({
       setSelectedAnswer(null)
       setAnswerFeedback(null)
       setScore(0)
-      setShowIdentityChoices(false)
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -247,17 +260,6 @@ export default function PlayPage({
     } finally {
       setStartingGame(false)
     }
-  }
-
-  async function handleStartGame() {
-    if (!hunt || startingGame) return
-
-    if (!hunt.permissions.registrationRequired) {
-      await startGame(null, false)
-      return
-    }
-
-    setShowIdentityChoices(true)
   }
 
   function goToRegistration() {
@@ -431,79 +433,37 @@ export default function PlayPage({
             🎵 Play the Song
           </a>
 
-          {!showIdentityChoices ? (
+          {rememberedPlayerId ? (
             <button
               type="button"
-              onClick={handleStartGame}
+              onClick={() => startGame(rememberedPlayerId, false)}
               disabled={startingGame}
               className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              {startingGame ? 'Starting...' : 'Start the Game →'}
+              {startingGame
+                ? 'Starting...'
+                : `Continue to the Hunt${rememberedPlayerName ? ` (${rememberedPlayerName})` : ''}`}
             </button>
           ) : (
-            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-              {rememberedPlayerId ? (
-                <>
-                  <p className="font-semibold text-slate-700">
-                    Welcome back
-                    {rememberedPlayerName ? `, ${rememberedPlayerName}` : ''}.
-                  </p>
+            <button
+              type="button"
+              onClick={goToRegistration}
+              disabled={startingGame}
+              className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              Register to Start the Hunt
+            </button>
+          )}
 
-                  <button
-                    type="button"
-                    onClick={() => startGame(rememberedPlayerId, false)}
-                    disabled={startingGame}
-                    className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white disabled:bg-gray-400"
-                  >
-                    {startingGame
-                      ? 'Starting...'
-                      : `Continue${rememberedPlayerName ? ` as ${rememberedPlayerName}` : ''}`}
-                  </button>
-
-                  {hunt.permissions.allowAnonymousPlayers && (
-                    <button
-                      type="button"
-                      onClick={() => startGame(null, true)}
-                      disabled={startingGame}
-                      className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
-                    >
-                      Play Anonymously
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={goToRegistration}
-                    disabled={startingGame}
-                    className="w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white disabled:bg-gray-400"
-                  >
-                    Register to Play
-                  </button>
-
-                  {hunt.permissions.allowAnonymousPlayers && (
-                    <button
-                      type="button"
-                      onClick={() => startGame(null, true)}
-                      disabled={startingGame}
-                      className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
-                    >
-                      Play Anonymously
-                    </button>
-                  )}
-                </>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setShowIdentityChoices(false)}
-                disabled={startingGame}
-                className="mt-4 text-sm font-semibold text-gray-500 underline"
-              >
-                Back
-              </button>
-            </div>
+          {hunt.permissions.allowAnonymousPlayers && (
+            <button
+              type="button"
+              onClick={() => startGame(null, true)}
+              disabled={startingGame}
+              className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
+            >
+              Play Anonymous
+            </button>
           )}
 
           {error && (

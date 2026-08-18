@@ -45,7 +45,6 @@ function RegisterForm() {
     service_affiliation: false,
   })
   const [loading, setLoading] = useState(false)
-  const [anonymousLoading, setAnonymousLoading] = useState(false)
   const [error, setError] = useState('')
 
   const phoneDigits = normalizePhoneDigits(form.phone_number)
@@ -53,8 +52,7 @@ function RegisterForm() {
   const canStart =
     form.first_name.trim().length > 0 &&
     phoneDigits.length === 10 &&
-    !loading &&
-    !anonymousLoading
+    !loading
 
   useEffect(() => {
     let cancelled = false
@@ -102,10 +100,6 @@ function RegisterForm() {
     setForm({ ...form, phone_number: formatPhone(e.target.value) })
   }
 
-  const goToGame = () => {
-    router.push(qrSlug ? `/play/${encodeURIComponent(qrSlug)}` : '/')
-  }
-
   const handleSubmit = async () => {
     if (!canStart) {
       setError('Please enter your first name and a valid 10-digit mobile number.')
@@ -138,49 +132,23 @@ function RegisterForm() {
         throw new Error(payload.error || 'Unable to register player.')
       }
 
+      if (!payload.player?.playerId) {
+        throw new Error('Registration completed without a valid player record.')
+      }
+
       localStorage.setItem('player_id', payload.player.playerId)
       localStorage.setItem('player_name', payload.player.firstName)
       localStorage.setItem('qr_slug', qrSlug)
       sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
+      sessionStorage.setItem(
+        `start_after_registration:${qrSlug}`,
+        payload.player.playerId
+      )
 
-      goToGame()
+      router.replace(`/play/${encodeURIComponent(qrSlug)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to register player.')
       setLoading(false)
-    }
-  }
-
-  const handleAnonymous = async () => {
-    setAnonymousLoading(true)
-    setError('')
-
-    try {
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mode: 'anonymous',
-          qrSlug,
-        }),
-      })
-
-      const payload = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'Anonymous play is not available for this game.')
-      }
-
-      localStorage.removeItem('player_id')
-      localStorage.removeItem('player_name')
-      localStorage.setItem('qr_slug', qrSlug)
-      sessionStorage.setItem(`anonymous_player:${qrSlug}`, 'true')
-
-      goToGame()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Anonymous play is not available for this game.')
-      setAnonymousLoading(false)
     }
   }
 
@@ -201,29 +169,9 @@ function RegisterForm() {
           ) : null}
 
           <p className="text-gray-600 mt-3">
-            Play anonymously without saving history, or register below to keep your game record.
+            Register below to start the hunt.
           </p>
         </div>
-
-        {config?.allowAnonymousPlayers && (
-          <div className="mb-5">
-            <button
-              onClick={handleAnonymous}
-              disabled={anonymousLoading || loading || configLoading}
-              className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-lg font-bold transition-colors"
-            >
-              {anonymousLoading ? 'Starting Anonymous Play...' : 'Play Anonymously'}
-            </button>
-
-            <div className="flex items-center gap-3 mt-5">
-              <div className="h-px bg-gray-200 flex-1" />
-              <span className="text-xs uppercase tracking-wide text-gray-400 font-semibold">
-                Or register
-              </span>
-              <div className="h-px bg-gray-200 flex-1" />
-            </div>
-          </div>
-        )}
 
         {configLoading && (
           <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm">
