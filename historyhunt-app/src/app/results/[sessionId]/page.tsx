@@ -60,6 +60,7 @@ type ResultsResponse = {
     campaign_id: string
     slug: string
     title: string
+    event_enabled: boolean
   } | null
   error?: string
 }
@@ -107,6 +108,17 @@ export default function ResultsPage({
           throw new Error('Results API returned an invalid response.')
         }
 
+        if (body.campaign?.event_enabled && body.campaign.slug && body.game.slug) {
+          localStorage.setItem(
+            `history_hunt_event_completed:${body.campaign.slug}:${body.game.slug}`,
+            JSON.stringify({
+              score: body.session.score,
+              totalPoints: body.session.total_points,
+              completedAt: body.session.completed_at,
+            })
+          )
+        }
+
         setResults(body)
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unable to load this result.'
@@ -133,13 +145,15 @@ export default function ResultsPage({
   const game = results?.game || null
   const badges = results?.badges || null
   const venue = results?.venue || null
+  const campaign = results?.campaign || null
+  const isEventGame = campaign?.event_enabled === true
 
   const isPerfect = session && Number(session.score) >= Number(session.total_points)
 
   const selectedBadge = useMemo(() => {
     if (!game) return null
 
-    if (isPerfect && badges?.perfect_score?.active !== false && badges?.perfect_score?.image_url) {
+    if (!isEventGame && isPerfect && badges?.perfect_score?.active !== false && badges?.perfect_score?.image_url) {
       return badges.perfect_score
     }
 
@@ -148,21 +162,21 @@ export default function ResultsPage({
     }
 
     return null
-  }, [badges, game, isPerfect])
+  }, [badges, game, isEventGame, isPerfect])
 
   const badgeUrl = useMemo(() => {
     if (selectedBadge?.image_url) return selectedBadge.image_url
     if (!game) return ''
 
-    return isPerfect
+    return !isEventGame && isPerfect
       ? game.perfect_score_badge_url || game.participant_badge_url || ''
       : game.participant_badge_url || ''
-  }, [game, isPerfect, selectedBadge])
+  }, [game, isEventGame, isPerfect, selectedBadge])
 
   const badgeAlt =
     selectedBadge?.alt_text ||
     selectedBadge?.title ||
-    (isPerfect ? 'Perfect Score Badge' : 'Completed Hunt Badge')
+    (!isEventGame && isPerfect ? 'Perfect Score Badge' : 'Completed Hunt Badge')
 
   const playUrl = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -233,7 +247,7 @@ export default function ResultsPage({
         </p>
 
         <h1 className="mt-2 text-4xl font-black text-blue-900">
-          {isPerfect ? 'Perfect Score!' : 'Hunt Completed!'}
+          {!isEventGame && isPerfect ? 'Perfect Score!' : 'Game Completed!'}
         </h1>
 
         <p className="mt-2 text-slate-700">
@@ -317,7 +331,7 @@ export default function ResultsPage({
           </section>
         )}
 
-        <section className="mt-8 border-t border-slate-200 pt-6">
+        {!isEventGame && <section className="mt-8 border-t border-slate-200 pt-6">
           <h2 className="text-xl font-black text-blue-900">Keep Exploring</h2>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -339,7 +353,16 @@ export default function ResultsPage({
               More About the Song →
             </a>
           </div>
-        </section>
+        </section>}
+
+        {isEventGame && campaign?.slug && (
+          <Link
+            href={`/events/${encodeURIComponent(campaign.slug)}`}
+            className="mt-8 inline-block rounded-xl bg-red-700 px-6 py-4 text-lg font-bold text-white"
+          >
+            Return to {campaign.title || 'Event Games'} →
+          </Link>
+        )}
       </div>
     </main>
   )
