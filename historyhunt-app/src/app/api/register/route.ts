@@ -9,11 +9,15 @@ type RegisterBody = {
   qrSlug?: string
   firstName?: string
   first_name?: string
+  displayName?: string
+  display_name?: string
   phoneNumber?: string
   phone_number?: string
   email?: string
   smsOptIn?: boolean
   sms_opt_in?: boolean
+  leaderboardOptIn?: boolean
+  leaderboard_opt_in?: boolean
   serviceAffiliation?: boolean
   service_affiliation?: boolean
 }
@@ -48,6 +52,30 @@ function normalizeEmail(value: unknown) {
   return email
 }
 
+function normalizeDisplayName(value: unknown) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 24)
+}
+
+function validateDisplayName(displayName: string) {
+  if (!displayName) return
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _-]{1,22}[A-Za-z0-9]$/.test(displayName)) {
+    throw new Error('Game Play User Name must be 3–24 characters and use only letters, numbers, spaces, underscores, or hyphens.')
+  }
+}
+
+function registrationWriteError(
+  error: { code?: string; message?: string } | null,
+  fallback: string
+) {
+  if (error?.code === '23505' && String(error.message || '').includes('display_name')) {
+    return new Error('That Game Play User Name is already taken. Please choose another.')
+  }
+  return new Error(error?.message || fallback)
+}
+
 function normalizeCampaign(value: unknown) {
   if (Array.isArray(value)) return value[0] || null
   return value || null
@@ -58,37 +86,13 @@ async function loadRegistrationConfig(qrSlug: string) {
     throw new Error('Missing QR slug.')
   }
 
-  const { data: venueRaw, error: venueError } = await supabaseAdmin
-    .from('venues')
-    .select(`
-      venue_id,
-      name,
-      qr_slug,
-      active,
-      registration_enabled,
-      campaign_id,
-      campaigns (
-        campaign_id,
-        title,
-        active
-      )
-    `)
-    .eq('qr_slug', qrSlug)
-    .eq('active', true)
-    .maybeSingle()
-
-  if (venueError || !venueRaw) {
-    throw new Error('This History Hunt is not currently available.')
-  }
-
-  const venue = venueRaw as Record<string, unknown>
-  const campaign = normalizeCampaign(venue.campaigns) as Record<string, unknown> | null
-
   const { data: game, error: gameError } = await supabaseAdmin
     .from('games')
     .select(`
       game_id,
+      campaign_id,
       title,
+      game_type,
       status,
       active,
       registration_required,
@@ -105,25 +109,78 @@ async function loadRegistrationConfig(qrSlug: string) {
   }
 
   const gameRecord = game as Record<string, unknown>
+  const isVenueGame = String(gameRecord.game_type || '').toLowerCase() === 'venue'
+
+  const venueQuery = supabaseAdmin
+    .from('venues')
+    .select('venue_id, name, qr_slug, active, registration_enabled, campaign_id')
+    .eq('active', true)
+
+  const { data: venueRaw, error: venueError } = isVenueGame
+    ? await venueQuery.eq('qr_slug', qrSlug).maybeSingle()
+    : await venueQuery.eq('slug', 'web-games').maybeSingle()
+
+  if (venueError || !venueRaw) {
+    throw new Error('This History Hunt is not currently available.')
+  }
+
+  const venue = venueRaw as Record<string, unknown>
+  const campaignId = String(gameRecord.campaign_id || '')
+  let campaign: Record<string, unknown> | null = null
+  if (campaignId) {
+    const { data } = await supabaseAdmin
+      .from('campaigns')
+      .select('campaign_id, title, active, event_enabled, event_leaderboard_enabled')
+      .eq('campaign_id', campaignId)
+      .maybeSingle()
+    campaign = normalizeCampaign(data) as Record<string, unknown> | null
+  }
 
   return {
     qrSlug,
     venueId: String(venue.venue_id || ''),
     venueName: String(venue.name || ''),
-    campaignId: campaign?.campaign_id ? String(campaign.campaign_id) : '',
+    campaignId,
     campaignTitle: campaign?.title ? String(campaign.title) : '',
     gameId: String(gameRecord.game_id || ''),
     gameTitle: String(gameRecord.title || ''),
     registrationRequired: Boolean(gameRecord.registration_required) || Boolean(venue.registration_enabled),
     allowAnonymousPlayers: gameRecord.allow_anonymous_players !== false,
+    eventLeaderboardEnabled: Boolean(campaign?.event_enabled) && Boolean(campaign?.event_leaderboard_enabled),
   }
 }
 
-async function upsertRegisteredPlayer(body: RegisterBody) {
+async function saveEventLeaderboardPreference(
+  campaignId: string,
+  playerId: string,
+  leaderboardOptIn: boolean
+) {
+  if (!campaignId) return
+
+  const { error } = await supabaseAdmin
+    .from('event_player_preferences')
+    .upsert({
+      campaign_id: campaignId,
+      player_id: playerId,
+      leaderboard_opt_in: leaderboardOptIn,
+      leaderboard_opt_in_at: leaderboardOptIn ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'campaign_id,player_id' })
+
+  if (error) throw new Error(error.message || 'Unable to save leaderboard preference.')
+}
+
+async function upsertRegisteredPlayer(
+  body: RegisterBody,
+  campaignId: string,
+  eventLeaderboardEnabled: boolean
+) {
   const firstName = normalizeFirstName(body.firstName ?? body.first_name)
+  const requestedDisplayName = normalizeDisplayName(body.displayName ?? body.display_name)
   const phoneDigits = normalizePhoneDigits(body.phoneNumber ?? body.phone_number)
   const email = normalizeEmail(body.email)
   const smsOptIn = Boolean(body.smsOptIn ?? body.sms_opt_in)
+  const leaderboardOptIn = eventLeaderboardEnabled && Boolean(body.leaderboardOptIn ?? body.leaderboard_opt_in)
   const serviceAffiliation = Boolean(body.serviceAffiliation ?? body.service_affiliation)
 
   if (!firstName) {
@@ -134,13 +191,15 @@ async function upsertRegisteredPlayer(body: RegisterBody) {
     throw new Error('Please enter a valid 10-digit mobile number.')
   }
 
+  validateDisplayName(requestedDisplayName)
+
   const countryCode = '+1'
   const countryIso = 'US'
   const phoneE164 = `${countryCode}${phoneDigits}`
 
   const { data: existingPlayers, error: lookupError } = await supabaseAdmin
     .from('players')
-    .select('player_id')
+    .select('player_id, display_name')
     .eq('phone_number', phoneDigits)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -153,11 +212,18 @@ async function upsertRegisteredPlayer(body: RegisterBody) {
 
   if (existingPlayer?.player_id) {
     const playerId = String(existingPlayer.player_id)
+    const existingDisplayName = String(existingPlayer.display_name || '')
+    const displayName = existingDisplayName || requestedDisplayName
+
+    if (leaderboardOptIn && !displayName) {
+      throw new Error('Please choose a Game Play User Name or leave the leaderboard option unchecked.')
+    }
 
     const { error: updateError } = await supabaseAdmin
       .from('players')
       .update({
         first_name: firstName,
+        ...(existingDisplayName ? {} : { display_name: requestedDisplayName || null }),
         country_code: countryCode,
         country_iso: countryIso,
         phone_e164: phoneE164,
@@ -170,19 +236,31 @@ async function upsertRegisteredPlayer(body: RegisterBody) {
       .eq('player_id', playerId)
 
     if (updateError) {
-      throw new Error(updateError.message || 'Unable to update player.')
+      throw registrationWriteError(updateError, 'Unable to update player.')
     }
+
+    await saveEventLeaderboardPreference(
+      campaignId,
+      playerId,
+      leaderboardOptIn
+    )
 
     return {
       playerId,
       firstName,
+      displayName,
     }
+  }
+
+  if (leaderboardOptIn && !requestedDisplayName) {
+    throw new Error('Please choose a Game Play User Name or leave the leaderboard option unchecked.')
   }
 
   const { data: newPlayer, error: insertError } = await supabaseAdmin
     .from('players')
     .insert({
       first_name: firstName,
+      display_name: requestedDisplayName || null,
       phone_number: phoneDigits,
       country_code: countryCode,
       country_iso: countryIso,
@@ -194,16 +272,23 @@ async function upsertRegisteredPlayer(body: RegisterBody) {
       privacy_accepted: true,
       source: 'qr',
     })
-    .select('player_id, first_name')
+    .select('player_id, first_name, display_name')
     .single()
 
   if (insertError || !newPlayer) {
-    throw new Error(insertError?.message || 'Unable to register player.')
+    throw registrationWriteError(insertError, 'Unable to register player.')
   }
+
+  await saveEventLeaderboardPreference(
+    campaignId,
+    String(newPlayer.player_id),
+    leaderboardOptIn
+  )
 
   return {
     playerId: String(newPlayer.player_id),
     firstName: String(newPlayer.first_name || firstName),
+    displayName: String(newPlayer.display_name || requestedDisplayName),
   }
 }
 
@@ -256,7 +341,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const player = await upsertRegisteredPlayer(body)
+    const player = await upsertRegisteredPlayer(
+      body,
+      config.campaignId,
+      config.eventLeaderboardEnabled
+    )
 
     return NextResponse.json({
       mode: 'registered',

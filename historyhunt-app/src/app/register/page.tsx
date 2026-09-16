@@ -10,6 +10,7 @@ type RegistrationConfig = {
   gameTitle: string
   registrationRequired: boolean
   allowAnonymousPlayers: boolean
+  eventLeaderboardEnabled: boolean
 }
 
 function normalizePhoneDigits(value: string): string {
@@ -39,9 +40,11 @@ function RegisterForm() {
   const [configLoading, setConfigLoading] = useState(true)
   const [form, setForm] = useState({
     first_name: '',
+    display_name: '',
     phone_number: '',
     email: '',
     sms_opt_in: false,
+    leaderboard_opt_in: false,
     service_affiliation: false,
   })
   const [loading, setLoading] = useState(false)
@@ -96,13 +99,24 @@ function RegisterForm() {
     }
   }, [qrSlug])
 
+  useEffect(() => {
+    const savedDisplayName = localStorage.getItem('player_display_name') || ''
+    if (savedDisplayName) {
+      // Restore the returning player's established public identity after mounting.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm(current => ({ ...current, display_name: savedDisplayName }))
+    }
+  }, [])
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, phone_number: formatPhone(e.target.value) })
   }
 
   const handleSubmit = async () => {
     if (!canStart) {
-      setError('Please enter your first name and a valid 10-digit mobile number.')
+      setError(
+        'Please enter your first name and a valid 10-digit mobile number.'
+      )
       return
     }
 
@@ -119,9 +133,11 @@ function RegisterForm() {
           mode: 'registered',
           qrSlug,
           firstName: form.first_name,
+          displayName: form.display_name,
           phoneNumber: phoneDigits,
           email: form.email,
           smsOptIn: form.sms_opt_in,
+          leaderboardOptIn: form.leaderboard_opt_in,
           serviceAffiliation: form.service_affiliation,
         }),
       })
@@ -138,6 +154,9 @@ function RegisterForm() {
 
       localStorage.setItem('player_id', payload.player.playerId)
       localStorage.setItem('player_name', payload.player.firstName)
+      if (payload.player.displayName) {
+        localStorage.setItem('player_display_name', payload.player.displayName)
+      }
       localStorage.setItem('qr_slug', qrSlug)
       sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
       sessionStorage.setItem(
@@ -245,7 +264,41 @@ function RegisterForm() {
           />
         </div>
 
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Game Play User Name <span className="text-gray-400 text-xs">(optional)</span>
+          </label>
+
+          <input
+            name="nickname"
+            autoComplete="nickname"
+            className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Example: Monty86"
+            value={form.display_name}
+            onChange={e => setForm({ ...form, display_name: e.target.value })}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Your public name for all History Hunt games and leaderboards. Returning players keep the same name.
+          </p>
+        </div>
+
         <div className="space-y-3 mb-6">
+          {config?.eventLeaderboardEnabled && <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 w-5 h-5 accent-blue-900"
+              checked={form.leaderboard_opt_in}
+              onChange={e =>
+                setForm({ ...form, leaderboard_opt_in: e.target.checked })
+              }
+            />
+
+            <span className="text-sm text-gray-600">
+              Show my leaderboard name and scores on this event&apos;s public leaderboard.
+              <span className="block text-xs text-gray-400">You can play without joining the leaderboard.</span>
+            </span>
+          </label>}
+
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
