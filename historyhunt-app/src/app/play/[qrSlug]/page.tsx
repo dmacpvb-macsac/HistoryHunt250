@@ -37,6 +37,7 @@ type HuntData = {
     game_id: string
     slug: string
     title: string
+    game_type: string
     total_points: number
     status: string
     starts_at: string | null
@@ -406,6 +407,11 @@ export default function PlayPage({
     )
   }
 
+  const showSongControls =
+    hunt.game.game_type === 'community' ||
+    hunt.game.game_type === 'music' ||
+    hunt.game.slug === 'america-250-behind-the-lyrics'
+
   if (!sessionId) {
     return (
       <main className="min-h-screen bg-slate-100 p-4">
@@ -420,18 +426,22 @@ export default function PlayPage({
             {hunt.game.title || 'History Hunt™'}
           </h1>
 
-          <p className="mt-3 text-gray-700">
-            Listen to America 250 Proof™, then start the game.
-          </p>
+          {showSongControls && (
+            <>
+              <p className="mt-3 text-gray-700">
+                Listen to America 250 Proof™, then start the game.
+              </p>
 
-          <a
-            href={YOUTUBE_LYRIC_VIDEO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-8 block w-full rounded-xl bg-red-600 p-4 text-lg font-bold text-white transition hover:bg-red-700"
-          >
-            🎵 Play the Song
-          </a>
+              <a
+                href={YOUTUBE_LYRIC_VIDEO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8 block w-full rounded-xl bg-red-600 p-4 text-lg font-bold text-white transition hover:bg-red-700"
+              >
+                🎵 Play the Song
+              </a>
+            </>
+          )}
 
           {rememberedPlayerId ? (
             <button
@@ -516,7 +526,7 @@ export default function PlayPage({
           </div>
         )}
 
-        {question.is_bonus && (
+        {showSongControls && question.is_bonus && (
           <a
             href={YOUTUBE_LYRIC_VIDEO_URL}
             target="_blank"
