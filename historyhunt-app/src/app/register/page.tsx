@@ -100,11 +100,16 @@ function RegisterForm() {
   }, [qrSlug])
 
   useEffect(() => {
+    const savedFirstName = localStorage.getItem('player_name') || ''
     const savedDisplayName = localStorage.getItem('player_display_name') || ''
-    if (savedDisplayName) {
-      // Restore the returning player's established public identity after mounting.
+    if (savedFirstName || savedDisplayName) {
+      // Restore the returning player's established identity after mounting.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm(current => ({ ...current, display_name: savedDisplayName }))
+      setForm(current => ({
+        ...current,
+        first_name: savedFirstName || current.first_name,
+        display_name: savedDisplayName || current.display_name,
+      }))
     }
   }, [])
 
@@ -298,23 +303,6 @@ function RegisterForm() {
               <span className="block text-xs text-gray-400">You can play without joining the leaderboard.</span>
             </span>
           </label>}
-
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 w-5 h-5 accent-blue-900"
-              checked={form.service_affiliation}
-              onChange={e =>
-                setForm({ ...form, service_affiliation: e.target.checked })
-              }
-            />
-
-            <span className="text-sm text-gray-600">
-              I am a veteran, active-duty service member, military family member,
-              or first responder.
-              <span className="text-gray-400"> (optional)</span>
-            </span>
-          </label>
 
           <label className="flex items-start gap-3 cursor-pointer">
             <input
