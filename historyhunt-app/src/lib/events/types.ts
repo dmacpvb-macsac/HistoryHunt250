@@ -27,6 +27,9 @@ export type EventHubResponse = {
     title: string
     subtitle: string
     description: string
+    welcomeTitle: string
+    welcomeMessage: string
+    welcomeNote: string
     eventType: string
     heroImageUrl: string
     logoImageUrl: string
