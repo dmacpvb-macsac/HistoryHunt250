@@ -61,6 +61,8 @@ type ResultsResponse = {
     slug: string
     title: string
     event_enabled: boolean
+    event_logo_image_url: string
+    event_primary_color: string
   } | null
   error?: string
 }
@@ -358,7 +360,8 @@ export default function ResultsPage({
         {isEventGame && campaign?.slug && (
           <Link
             href={`/events/${encodeURIComponent(campaign.slug)}`}
-            className="mt-8 inline-block rounded-xl bg-red-700 px-6 py-4 text-lg font-bold text-white"
+            className="mt-8 inline-block rounded-xl px-6 py-4 text-lg font-bold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: campaign.event_primary_color || '#1e3a8a' }}
           >
             Return to {campaign.title || 'Event Games'} →
           </Link>

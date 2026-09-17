@@ -11,6 +11,9 @@ type RegistrationConfig = {
   registrationRequired: boolean
   allowAnonymousPlayers: boolean
   eventLeaderboardEnabled: boolean
+  eventEnabled: boolean
+  eventLogoImageUrl: string
+  eventPrimaryColor: string
 }
 
 function normalizePhoneDigits(value: string): string {
@@ -51,6 +54,14 @@ function RegisterForm() {
   const [error, setError] = useState('')
 
   const phoneDigits = normalizePhoneDigits(form.phone_number)
+  const registrationLogo =
+    config?.eventEnabled && config.eventLogoImageUrl
+      ? config.eventLogoImageUrl
+      : '/history-hunt-logo.png'
+  const registrationLogoAlt =
+    config?.eventEnabled && config.campaignTitle
+      ? `${config.campaignTitle} logo`
+      : 'History Hunt'
 
   const canStart =
     form.first_name.trim().length > 0 &&
@@ -181,8 +192,8 @@ function RegisterForm() {
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-xl">
         <div className="text-center mb-6">
           <img
-            src="/history-hunt-logo.png"
-            alt="History Hunt"
+            src={registrationLogo}
+            alt={registrationLogoAlt}
             className="w-40 mx-auto mb-4"
           />
 

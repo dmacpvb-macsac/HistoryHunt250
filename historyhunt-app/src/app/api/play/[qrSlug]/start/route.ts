@@ -84,6 +84,9 @@ function publicCampaignFields(campaign: Record<string, unknown> | null) {
     slug: String(campaign.slug || ''),
     title: String(campaign.title || ''),
     active: Boolean(campaign.active),
+    event_enabled: Boolean(campaign.event_enabled),
+    event_logo_image_url: campaign.event_logo_image_url ? String(campaign.event_logo_image_url) : '',
+    event_primary_color: campaign.event_primary_color ? String(campaign.event_primary_color) : '',
   }
 }
 
@@ -190,7 +193,7 @@ async function loadHunt(qrSlug: string) {
   if (campaignId) {
     const { data: campaignRaw, error: campaignError } = await supabaseAdmin
       .from('campaigns')
-      .select('campaign_id, slug, title, active')
+      .select('campaign_id, slug, title, active, event_enabled, event_logo_image_url, event_primary_color')
       .eq('campaign_id', campaignId)
       .maybeSingle()
 
