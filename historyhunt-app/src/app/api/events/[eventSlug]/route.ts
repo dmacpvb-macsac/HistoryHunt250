@@ -91,7 +91,7 @@ export async function GET(
 
   const { data: campaign, error: campaignError } = await supabaseAdmin
     .from('campaigns')
-    .select('campaign_id, slug, title, description, active, event_enabled, event_type, event_visibility, event_subtitle, event_short_description, event_hero_image_url, event_logo_image_url, event_primary_color, event_secondary_color, event_accent_color, event_leaderboard_enabled')
+    .select('campaign_id, slug, title, description, active, event_enabled, event_type, event_visibility, event_subtitle, event_short_description, event_welcome_title, event_welcome_message, event_welcome_note, event_hero_image_url, event_logo_image_url, event_primary_color, event_secondary_color, event_accent_color, event_leaderboard_enabled')
     .eq('slug', eventSlug)
     .eq('active', true)
     .eq('event_enabled', true)
@@ -184,6 +184,9 @@ export async function GET(
       title: String(campaign.title || ''),
       subtitle: String(campaign.event_subtitle || ''),
       description: String(campaign.event_short_description || campaign.description || ''),
+      welcomeTitle: String(campaign.event_welcome_title || ''),
+      welcomeMessage: String(campaign.event_welcome_message || ''),
+      welcomeNote: String(campaign.event_welcome_note || ''),
       eventType: String(campaign.event_type || 'custom'),
       heroImageUrl: String(campaign.event_hero_image_url || ''),
       logoImageUrl: String(campaign.event_logo_image_url || ''),

@@ -92,8 +92,29 @@ export default function EventPage({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-8 px-5 py-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section>
+      <div className="mx-auto max-w-5xl px-5 py-10">
+        {(data.event.welcomeTitle || data.event.welcomeMessage || data.event.welcomeNote) && (
+          <section className="mb-8 rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+            {data.event.welcomeTitle && (
+              <h2 className="text-3xl font-black" style={{ color: primaryColor }}>
+                {data.event.welcomeTitle}
+              </h2>
+            )}
+            {data.event.welcomeMessage && (
+              <div className="mt-4 space-y-4 text-lg leading-relaxed text-slate-700">
+                {data.event.welcomeMessage.split(/\n\s*\n/).map((paragraph, index) => (
+                  <p key={index}>{paragraph}</p>
+                ))}
+              </div>
+            )}
+            {data.event.welcomeNote && (
+              <p className="mt-5 text-sm italic text-slate-500">{data.event.welcomeNote}</p>
+            )}
+          </section>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section>
           <h2 className="text-3xl font-black" style={{ color: primaryColor }}>Choose a Game</h2>
           <p className="mt-2 text-slate-700">Play any game in any order. Your best completed score in each game counts.</p>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -120,9 +141,9 @@ export default function EventPage({
               )
             })}
           </div>
-        </section>
+          </section>
 
-        <aside>
+          <aside>
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="text-2xl font-black" style={{ color: primaryColor }}>Leaderboard</h2>
             {!data.event.leaderboardEnabled ? (
@@ -145,7 +166,8 @@ export default function EventPage({
             )}
             <p className="mt-4 text-xs leading-relaxed text-slate-500">Only players who choose a Game Play User Name and opt in appear publicly. Contact details are never shown.</p>
           </div>
-        </aside>
+          </aside>
+        </div>
       </div>
     </main>
   )
