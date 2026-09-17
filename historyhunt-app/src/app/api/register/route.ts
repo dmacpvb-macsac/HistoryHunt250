@@ -130,7 +130,7 @@ async function loadRegistrationConfig(qrSlug: string) {
   if (campaignId) {
     const { data } = await supabaseAdmin
       .from('campaigns')
-      .select('campaign_id, title, active, event_enabled, event_leaderboard_enabled')
+      .select('campaign_id, title, active, event_enabled, event_leaderboard_enabled, event_logo_image_url, event_primary_color')
       .eq('campaign_id', campaignId)
       .maybeSingle()
     campaign = normalizeCampaign(data) as Record<string, unknown> | null
@@ -142,6 +142,9 @@ async function loadRegistrationConfig(qrSlug: string) {
     venueName: String(venue.name || ''),
     campaignId,
     campaignTitle: campaign?.title ? String(campaign.title) : '',
+    eventEnabled: Boolean(campaign?.event_enabled),
+    eventLogoImageUrl: campaign?.event_logo_image_url ? String(campaign.event_logo_image_url) : '',
+    eventPrimaryColor: campaign?.event_primary_color ? String(campaign.event_primary_color) : '',
     gameId: String(gameRecord.game_id || ''),
     gameTitle: String(gameRecord.title || ''),
     registrationRequired: Boolean(gameRecord.registration_required) || Boolean(venue.registration_enabled),

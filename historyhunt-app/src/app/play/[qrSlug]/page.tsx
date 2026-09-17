@@ -32,6 +32,9 @@ type HuntData = {
     campaign_id: string
     slug: string
     title: string
+    event_enabled: boolean
+    event_logo_image_url: string
+    event_primary_color: string
   } | null
   game: {
     game_id: string
@@ -412,13 +415,22 @@ export default function PlayPage({
     hunt.game.game_type === 'music' ||
     hunt.game.slug === 'america-250-behind-the-lyrics'
 
+  const eventLogoUrl =
+    hunt.campaign?.event_enabled && hunt.campaign.event_logo_image_url
+      ? hunt.campaign.event_logo_image_url
+      : '/history-hunt-logo.png'
+  const eventLogoAlt =
+    hunt.campaign?.event_enabled && hunt.campaign.title
+      ? `${hunt.campaign.title} logo`
+      : 'History Hunt'
+
   if (!sessionId) {
     return (
       <main className="min-h-screen bg-slate-100 p-4">
         <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 text-center shadow-xl">
           <img
-            src="/history-hunt-logo.png"
-            alt="History Hunt"
+            src={eventLogoUrl}
+            alt={eventLogoAlt}
             className="mx-auto mb-5 w-52"
           />
 

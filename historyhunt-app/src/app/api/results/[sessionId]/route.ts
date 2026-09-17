@@ -97,6 +97,8 @@ function sanitizeCampaign(campaign: Record<string, unknown> | null) {
     slug: String(campaign.slug || ''),
     title: String(campaign.title || ''),
     event_enabled: Boolean(campaign.event_enabled),
+    event_logo_image_url: campaign.event_logo_image_url ? String(campaign.event_logo_image_url) : '',
+    event_primary_color: campaign.event_primary_color ? String(campaign.event_primary_color) : '',
   }
 }
 
@@ -175,7 +177,7 @@ export async function GET(
     sessionData.campaign_id
       ? supabaseAdmin
           .from('campaigns')
-          .select('campaign_id, slug, title, event_enabled')
+          .select('campaign_id, slug, title, event_enabled, event_logo_image_url, event_primary_color')
           .eq('campaign_id', sessionData.campaign_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
