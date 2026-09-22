@@ -130,23 +130,23 @@ export async function GET(
 
   let leaderboard: EventLeaderboardEntry[] = []
   if (campaign.event_leaderboard_enabled && games.length > 0) {
-    const { data: preferences, error: preferencesError } = await supabaseAdmin
-      .from('event_player_preferences')
-      .select('player_id')
+    const { data: sessions, error: leaderboardError } = await supabaseAdmin
+      .from('sessions')
+      .select('player_id, game_id, score, total_points, completed_at')
       .eq('campaign_id', campaign.campaign_id)
-      .eq('leaderboard_opt_in', true)
+      .eq('completed', true)
+      .not('player_id', 'is', null)
 
-    if (preferencesError) {
+    if (leaderboardError) {
       return NextResponse.json({ error: 'Unable to load the event leaderboard.' }, { status: 500 })
     }
 
-    const optedInPlayerIds = (preferences || []).map(row => String(row.player_id))
-
-    const { data: players, error: playersError } = optedInPlayerIds.length > 0
+    const playerIds = [...new Set((sessions || []).map(row => String(row.player_id)))]
+    const { data: players, error: playersError } = playerIds.length > 0
       ? await supabaseAdmin
           .from('players')
           .select('player_id, display_name')
-          .in('player_id', optedInPlayerIds)
+          .in('player_id', playerIds)
           .not('display_name', 'is', null)
       : { data: [], error: null }
 
@@ -157,20 +157,7 @@ export async function GET(
     const displayNames = new Map(
       (players || []).map(row => [String(row.player_id), String(row.display_name || '')])
     )
-    const publicPlayerIds = [...displayNames.keys()]
 
-    const { data: sessions, error: leaderboardError } = publicPlayerIds.length > 0
-      ? await supabaseAdmin
-      .from('sessions')
-      .select('player_id, game_id, score, total_points, completed_at')
-      .eq('campaign_id', campaign.campaign_id)
-      .eq('completed', true)
-      .in('player_id', publicPlayerIds)
-      : { data: [], error: null }
-
-    if (leaderboardError) {
-      return NextResponse.json({ error: 'Unable to load the event leaderboard.' }, { status: 500 })
-    }
     leaderboard = buildLeaderboard((sessions || []).map(row => ({
       ...row,
       display_name: displayNames.get(String(row.player_id)) || '',

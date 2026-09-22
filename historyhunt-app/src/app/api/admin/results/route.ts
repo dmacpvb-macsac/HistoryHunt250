@@ -7,11 +7,7 @@ export const runtime = 'nodejs'
 type PlayerRow = {
   player_id: string
   created_at: string | null
-  first_name: string | null
-  phone_number: string | null
-  email: string | null
-  sms_opt_in: boolean | null
-  service_affiliation: boolean | null
+  display_name: string | null
 }
 
 type SessionRow = {
@@ -44,11 +40,7 @@ type GameRow = {
 
 type AdminPlayerResult = {
   playerId: string
-  firstName: string
-  phoneNumber: string
-  email: string
-  smsOptIn: boolean
-  serviceAffiliation: boolean
+  displayName: string
   sessionsStarted: number
   sessionsCompleted: number
   bestScore: number
@@ -94,7 +86,7 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabaseAdmin
       .from('players')
-      .select('player_id, created_at, first_name, phone_number, email, sms_opt_in, service_affiliation')
+      .select('player_id, created_at, display_name')
       .order('created_at', { ascending: false }),
 
     supabaseAdmin
@@ -184,11 +176,7 @@ export async function GET(request: NextRequest) {
 
     return {
       playerId: player.player_id,
-      firstName: player.first_name || '',
-      phoneNumber: player.phone_number || '',
-      email: player.email || '',
-      smsOptIn: Boolean(player.sms_opt_in),
-      serviceAffiliation: Boolean(player.service_affiliation),
+      displayName: player.display_name || '',
       sessionsStarted: playerSessions.length,
       sessionsCompleted: completedSessions.length,
       bestScore: Number(bestSession?.score || 0),
@@ -208,8 +196,6 @@ export async function GET(request: NextRequest) {
       sessionsStarted: sessions.length,
       sessionsCompleted: sessions.filter(session => session.completed).length,
       responsesRecorded: responses.length,
-      smsOptInCount: players.filter(player => player.sms_opt_in).length,
-      serviceAffiliationCount: players.filter(player => player.service_affiliation).length,
     },
     players: playerResults,
   })

@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
     >
       <h1 style={{ color: "#111" }}>Privacy Policy</h1>
       <p style={{ color: "#666", fontSize: 14 }}>
-        Effective Date: June 25, 2026
+        Effective Date: September 22, 2026
       </p>
 
       <p>
@@ -42,15 +42,17 @@ export default function PrivacyPolicy() {
       </ul>
 
       <h2 style={{ color: "#111" }}>Information We May Collect</h2>
+      <p>
+        History Hunt game play does not require a legal name, phone number,
+        email address, or other contact information. A player chooses a public
+        player name. We store that player name with game progress, answers,
+        scores, badges, and leaderboard activity.
+      </p>
       <p>Depending on how you interact with our websites, we may collect:</p>
       <ul>
-        <li>Name</li>
-        <li>Email address</li>
-        <li>Mobile phone number</li>
-        <li>Team name or participant name</li>
+        <li>Player name or team name</li>
         <li>Game progress, score activity, badge activity, and leaderboard activity</li>
         <li>QR code scan activity and challenge participation activity</li>
-        <li>Veteran or active duty military status, if voluntarily provided</li>
         <li>Social media handles</li>
         <li>Uploaded photos or contest submissions</li>
         <li>Messages sent through contact forms</li>
@@ -74,10 +76,11 @@ export default function PrivacyPolicy() {
 
       <h2 style={{ color: "#111" }}>Cookies and Analytics</h2>
       <p>
-        Our websites may use cookies or similar technologies to improve
-        functionality, measure website performance, support embedded media
-        experiences, operate History Hunt game features, and protect against
-        misuse or fraud.
+        History Hunt uses a cookie to recognize a returning player on the same
+        device and connect that player to progress, scores, and badges. The
+        cookie contains a random access token, not the player name. Other pages
+        may use cookies or similar technologies to improve functionality,
+        measure performance, support embedded media, and protect against misuse.
       </p>
       <p>
         Most web browsers allow users to control or disable cookies through
@@ -97,6 +100,10 @@ export default function PrivacyPolicy() {
 
       <h2 style={{ color: "#111" }}>Information Sharing</h2>
       <p>We do not sell personal information.</p>
+      <p>
+        Player names and scores may appear on public leaderboards. Players
+        should not put personal or contact information in a player name.
+      </p>
       <p>
         Information may be shared with trusted service providers, event
         organizers, schools, sponsors, administrators, or partners solely for

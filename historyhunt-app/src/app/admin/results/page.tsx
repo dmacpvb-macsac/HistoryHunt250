@@ -4,11 +4,7 @@ import { useMemo, useState } from 'react'
 
 type AdminPlayerResult = {
   playerId: string
-  firstName: string
-  phoneNumber: string
-  email: string
-  smsOptIn: boolean
-  serviceAffiliation: boolean
+  displayName: string
   sessionsStarted: number
   sessionsCompleted: number
   bestScore: number
@@ -27,8 +23,6 @@ type AdminResultsResponse = {
     sessionsStarted: number
     sessionsCompleted: number
     responsesRecorded: number
-    smsOptInCount: number
-    serviceAffiliationCount: number
   }
   players: AdminPlayerResult[]
 }
@@ -40,10 +34,6 @@ function formatDate(value: string | null) {
   if (Number.isNaN(date.getTime())) return value
 
   return date.toLocaleString()
-}
-
-function yesNo(value: boolean) {
-  return value ? 'Yes' : 'No'
 }
 
 function csvEscape(value: unknown) {
@@ -66,11 +56,7 @@ export default function AdminResultsPage() {
     if (!results) return ''
 
     const headers = [
-      'First Name',
-      'Phone Number',
-      'Email',
-      'Service Checkbox',
-      'SMS/Email Opt-In Checkbox',
+      'Player Name',
       'Sessions Started',
       'Sessions Completed',
       'Best Score',
@@ -84,11 +70,7 @@ export default function AdminResultsPage() {
     ]
 
     const rows = results.players.map(player => [
-      player.firstName,
-      player.phoneNumber,
-      player.email,
-      yesNo(player.serviceAffiliation),
-      yesNo(player.smsOptIn),
+      player.displayName,
       player.sessionsStarted,
       player.sessionsCompleted,
       player.bestScore,
@@ -172,7 +154,7 @@ export default function AdminResultsPage() {
             Player Results Dashboard
           </h1>
           <p className="mt-3 text-gray-600">
-            Secure admin view for player count, contact fields, checkbox answers, sessions, scores, and response totals.
+            Secure admin view for player names, sessions, scores, and response totals.
           </p>
 
           <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 p-4">
@@ -212,7 +194,7 @@ export default function AdminResultsPage() {
 
         {results && (
           <>
-            <div className="mt-6 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl bg-white p-4 shadow">
                 <p className="text-sm text-gray-500">Players</p>
                 <p className="text-3xl font-bold text-blue-900">{results.summary.playerCount}</p>
@@ -228,14 +210,6 @@ export default function AdminResultsPage() {
               <div className="rounded-2xl bg-white p-4 shadow">
                 <p className="text-sm text-gray-500">Responses</p>
                 <p className="text-3xl font-bold text-blue-900">{results.summary.responsesRecorded}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-4 shadow">
-                <p className="text-sm text-gray-500">Service Checkbox</p>
-                <p className="text-3xl font-bold text-blue-900">{results.summary.serviceAffiliationCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-4 shadow">
-                <p className="text-sm text-gray-500">SMS/Email Opt-In</p>
-                <p className="text-3xl font-bold text-blue-900">{results.summary.smsOptInCount}</p>
               </div>
             </div>
 
@@ -261,11 +235,7 @@ export default function AdminResultsPage() {
                 <table className="min-w-full text-left text-sm">
                   <thead>
                     <tr className="border-b bg-slate-50 text-xs uppercase tracking-wide text-gray-500">
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Phone</th>
-                      <th className="p-3">Email</th>
-                      <th className="p-3">Service</th>
-                      <th className="p-3">Opt-In</th>
+                      <th className="p-3">Player Name</th>
                       <th className="p-3">Started</th>
                       <th className="p-3">Completed</th>
                       <th className="p-3">Best</th>
@@ -279,7 +249,7 @@ export default function AdminResultsPage() {
                   <tbody>
                     {results.players.length === 0 && (
                       <tr>
-                        <td className="p-4 text-gray-500" colSpan={13}>
+                        <td className="p-4 text-gray-500" colSpan={9}>
                           No players found in this environment.
                         </td>
                       </tr>
@@ -287,11 +257,7 @@ export default function AdminResultsPage() {
 
                     {results.players.map(player => (
                       <tr key={player.playerId} className="border-b align-top hover:bg-slate-50">
-                        <td className="p-3 font-bold text-blue-900">{player.firstName || '—'}</td>
-                        <td className="p-3">{player.phoneNumber || '—'}</td>
-                        <td className="p-3">{player.email || '—'}</td>
-                        <td className="p-3">{yesNo(player.serviceAffiliation)}</td>
-                        <td className="p-3">{yesNo(player.smsOptIn)}</td>
+                        <td className="p-3 font-bold text-blue-900">{player.displayName || '—'}</td>
                         <td className="p-3">{player.sessionsStarted}</td>
                         <td className="p-3">{player.sessionsCompleted}</td>
                         <td className="p-3">

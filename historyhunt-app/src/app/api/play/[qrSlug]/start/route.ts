@@ -2,14 +2,10 @@ import { createHash, randomBytes } from 'crypto'
 
 import { NextRequest, NextResponse } from 'next/server'
 
+import { resolvePlayerFromCookie } from '@/lib/playerIdentity'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
-
-type StartRequestBody = {
-  playerId?: string | null
-  anonymous?: boolean | null
-}
 
 function sanitizeQuestion(question: Record<string, unknown>) {
   return {
@@ -54,8 +50,6 @@ function publicGameFields(game: Record<string, unknown>) {
     ends_at: game.ends_at ? String(game.ends_at) : null,
     countdown_enabled: Boolean(game.countdown_enabled),
     leaderboard_enabled: Boolean(game.leaderboard_enabled),
-    registration_required: Boolean(game.registration_required),
-    allow_anonymous_players: game.allow_anonymous_players !== false,
     active: Boolean(game.active),
   }
 }
@@ -125,8 +119,6 @@ async function loadHunt(qrSlug: string) {
     ends_at,
     countdown_enabled,
     leaderboard_enabled,
-    registration_required,
-    allow_anonymous_players,
     active
   `
 
@@ -232,10 +224,6 @@ async function loadHunt(qrSlug: string) {
     throw new Error(`Questions not found for game: ${gameRecord.slug}`)
   }
 
-  // Player-entry behavior belongs to the game.
-  const registrationRequired = Boolean(gameRecord.registration_required)
-  const allowAnonymousPlayers = gameRecord.allow_anonymous_players !== false
-
   return {
     venue: publicVenueFields(venueRecord),
     campaign: publicCampaignFields(campaign),
@@ -244,9 +232,6 @@ async function loadHunt(qrSlug: string) {
       sanitizeQuestion(question as Record<string, unknown>)
     ),
     permissions: {
-      registrationRequired,
-      allowAnonymousPlayers,
-
       // A logical Web Games venue is plumbing, not a feature gate.
       quizEnabled: isVenueGame ? venueRecord.quiz_enabled !== false : true,
       rewardsEnabled: isVenueGame ? venueRecord.reward_enabled !== false : true,
@@ -272,39 +257,6 @@ function checkAvailability(game: { status: string; starts_at: string | null; end
   }
 
   return ''
-}
-
-async function resolvePlayerId(
-  playerId: string | null,
-  registrationRequired: boolean,
-  allowAnonymousPlayers: boolean,
-  anonymousRequested: boolean
-) {
-  const anonymousAllowed = anonymousRequested && allowAnonymousPlayers
-
-  if (!playerId) {
-    if (registrationRequired && !anonymousAllowed) {
-      throw new Error('REGISTRATION_REQUIRED')
-    }
-
-    return null
-  }
-
-  const { data: playerExists, error } = await supabaseAdmin
-    .from('players')
-    .select('player_id')
-    .eq('player_id', playerId)
-    .maybeSingle()
-
-  if (error || !playerExists) {
-    if (registrationRequired && !anonymousAllowed) {
-      throw new Error('REGISTRATION_REQUIRED')
-    }
-
-    return null
-  }
-
-  return String(playerExists.player_id)
 }
 
 async function resetIncompleteSession(sessionId: string, sessionAccessTokenHash: string) {
@@ -426,7 +378,7 @@ async function startSession(hunt: Awaited<ReturnType<typeof loadHunt>>, playerId
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ qrSlug: string }> }
 ) {
   const { qrSlug } = await params
@@ -455,9 +407,8 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({
-      hunt,
-    })
+    const player = await resolvePlayerFromCookie(request)
+    return NextResponse.json({ hunt, player })
   } catch (error: unknown) {
     const message =
       error instanceof Error
@@ -477,14 +428,6 @@ export async function POST(
 ) {
   const { qrSlug } = await params
 
-  let body: StartRequestBody = {}
-
-  try {
-    body = await request.json()
-  } catch {
-    body = {}
-  }
-
   try {
     const hunt = await loadHunt(qrSlug)
     const blockedMessage = checkAvailability(hunt.game)
@@ -509,14 +452,9 @@ export async function POST(
       )
     }
 
-    const anonymousRequested = body.anonymous === true
-
-    const playerId = await resolvePlayerId(
-      body.playerId ? String(body.playerId) : null,
-      hunt.permissions.registrationRequired,
-      hunt.permissions.allowAnonymousPlayers,
-      anonymousRequested
-    )
+    const player = await resolvePlayerFromCookie(request)
+    if (!player) throw new Error('PLAYER_NAME_REQUIRED')
+    const playerId = player.playerId
 
     const { sessionId, sessionAccessToken } = await startSession(hunt, playerId)
 
@@ -524,17 +462,17 @@ export async function POST(
       sessionId,
       sessionAccessToken,
       playerId,
-      anonymous: playerId === null,
+      player,
       hunt,
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unable to start this History Hunt.'
 
-    if (message === 'REGISTRATION_REQUIRED') {
+    if (message === 'PLAYER_NAME_REQUIRED') {
       return NextResponse.json(
         {
-          error: 'Registration required.',
-          registrationRequired: true,
+          error: 'Choose a player name to begin.',
+          playerNameRequired: true,
         },
         { status: 401 }
       )
