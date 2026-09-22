@@ -146,3 +146,44 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  let body: RegisterBody = {}
+  try { body = await request.json() } catch { body = {} }
+
+  try {
+    const qrSlug = String(body.qrSlug || '').trim()
+    const config = await loadRegistrationConfig(qrSlug)
+    const currentPlayer = await resolvePlayerFromCookie(request)
+
+    if (!currentPlayer) {
+      return NextResponse.json(
+        { error: 'We could not recognize this player on this device. Choose a player name to continue.' },
+        { status: 401 }
+      )
+    }
+
+    const displayName = validateDisplayName(body.displayName)
+    const { data, error } = await supabaseAdmin
+      .from('players')
+      .update({ display_name: displayName })
+      .eq('player_id', currentPlayer.playerId)
+      .select('player_id, display_name')
+      .single()
+
+    if (error || !data) throw registrationWriteError(error)
+
+    return NextResponse.json({
+      player: {
+        playerId: String(data.player_id),
+        displayName: String(data.display_name),
+      },
+      config,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unable to update your player name.' },
+      { status: 400 }
+    )
+  }
+}
