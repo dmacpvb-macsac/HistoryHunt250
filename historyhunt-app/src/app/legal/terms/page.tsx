@@ -12,7 +12,7 @@ export default function TermsOfUse() {
     >
       <h1 style={{ color: "#111" }}>Terms of Use</h1>
       <p style={{ color: "#666", fontSize: 14 }}>
-        Effective Date: June 25, 2026
+        Effective Date: September 22, 2026
       </p>
 
       <p>
@@ -45,10 +45,11 @@ export default function TermsOfUse() {
 
       <h2 style={{ color: "#111" }}>Accounts, Scores, and Participation</h2>
       <p>
-        Some activities may require registration or entry of basic participant,
-        team, or contact information. Users are responsible for providing accurate
-        information when participating in a hunt, contest, promotion, event,
-        badge activity, or leaderboard.
+        History Hunt game play does not require an account or contact
+        information. Players choose a unique public player name of 6–12
+        characters. Player names and scores may appear on public leaderboards.
+        Do not include personal, contact, obscene, discriminatory, threatening,
+        or disparaging information in a player name.
       </p>
 
       <h2 style={{ color: "#111" }}>Rules and Fair Play</h2>

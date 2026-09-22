@@ -45,12 +45,9 @@ type HuntData = {
     status: string
     starts_at: string | null
     ends_at: string | null
-    registration_required: boolean
   }
   questions: HuntQuestion[]
   permissions: {
-    registrationRequired: boolean
-    allowAnonymousPlayers: boolean
     quizEnabled: boolean
     rewardsEnabled: boolean
   }
@@ -63,7 +60,8 @@ type StartResponse = {
   hunt?: HuntData
   blockedMessage?: string
   error?: string
-  registrationRequired?: boolean
+  playerNameRequired?: boolean
+  player?: { playerId: string; displayName: string } | null
 }
 
 type AnswerFeedback = {
@@ -109,7 +107,6 @@ export default function PlayPage({
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState('')
   const [blockedMessage, setBlockedMessage] = useState('')
-  const [rememberedPlayerId, setRememberedPlayerId] = useState<string | null>(null)
   const [rememberedPlayerName, setRememberedPlayerName] = useState('')
   const [startingGame, setStartingGame] = useState(false)
 
@@ -148,20 +145,14 @@ export default function PlayPage({
           throw new Error('Game API returned an invalid response.')
         }
 
-        const storedPlayerId = localStorage.getItem('player_id')
-        const storedPlayerName = localStorage.getItem('player_name') || ''
-
-        setRememberedPlayerId(storedPlayerId)
-        setRememberedPlayerName(storedPlayerName)
+        setRememberedPlayerName(body.player?.displayName || '')
         setHunt(body.hunt)
 
-        const pendingPlayerId = sessionStorage.getItem(
-          `start_after_registration:${qrSlug}`
-        )
+        const startAfterUsername = sessionStorage.getItem(`start_after_username:${qrSlug}`)
 
-        if (pendingPlayerId) {
-          sessionStorage.removeItem(`start_after_registration:${qrSlug}`)
-          await startGame(pendingPlayerId, false, body.hunt)
+        if (startAfterUsername && body.player) {
+          sessionStorage.removeItem(`start_after_username:${qrSlug}`)
+          await startGame(body.hunt)
         }
 
         setLoading(false)
@@ -182,11 +173,7 @@ export default function PlayPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrSlug])
 
-  async function startGame(
-    playerId: string | null,
-    anonymous: boolean,
-    loadedHunt?: HuntData
-  ) {
+  async function startGame(loadedHunt?: HuntData) {
     const activeHunt = loadedHunt || hunt
 
     if (!activeHunt || startingGame) return
@@ -202,23 +189,13 @@ export default function PlayPage({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            playerId,
-            anonymous,
-          }),
+          body: JSON.stringify({}),
         }
       )
 
       const body = await response.json().catch(() => ({})) as StartResponse
 
-      if (response.status === 401 && body.registrationRequired) {
-        if (playerId) {
-          localStorage.removeItem('player_id')
-          localStorage.removeItem('player_name')
-          setRememberedPlayerId(null)
-          setRememberedPlayerName('')
-        }
-
+      if (response.status === 401 && body.playerNameRequired) {
         router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}`)
         return
       }
@@ -243,12 +220,6 @@ export default function PlayPage({
         `session_access_token:${body.sessionId}`,
         body.sessionAccessToken
       )
-
-      if (anonymous) {
-        sessionStorage.setItem(`anonymous_player:${qrSlug}`, 'true')
-      } else {
-        sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
-      }
 
       setQuestionIndex(0)
       setSelectedAnswer(null)
@@ -353,8 +324,6 @@ export default function PlayPage({
         throw new Error(body.error || `Unable to complete hunt. Status ${response.status}.`)
       }
 
-      sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
-
       router.push(`/results/${sessionId}`)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to save your final score. Please try again.'
@@ -411,9 +380,11 @@ export default function PlayPage({
   }
 
   const showSongControls =
-    hunt.game.game_type === 'community' ||
-    hunt.game.game_type === 'music' ||
-    hunt.game.slug === 'america-250-behind-the-lyrics'
+    !hunt.campaign?.event_enabled && (
+      hunt.game.game_type === 'community' ||
+      hunt.game.game_type === 'music' ||
+      hunt.game.slug === 'america-250-behind-the-lyrics'
+    )
 
   const eventLogoUrl =
     hunt.campaign?.event_enabled && hunt.campaign.event_logo_image_url
@@ -455,16 +426,16 @@ export default function PlayPage({
             </>
           )}
 
-          {rememberedPlayerId ? (
+          {rememberedPlayerName ? (
             <button
               type="button"
-              onClick={() => startGame(rememberedPlayerId, false)}
+              onClick={() => startGame()}
               disabled={startingGame}
               className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {startingGame
                 ? 'Starting...'
-                : `Continue to the Hunt${rememberedPlayerName ? ` (${rememberedPlayerName})` : ''}`}
+                : `Play as ${rememberedPlayerName}`}
             </button>
           ) : (
             <button
@@ -473,18 +444,7 @@ export default function PlayPage({
               disabled={startingGame}
               className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              Register to Start the Hunt
-            </button>
-          )}
-
-          {hunt.permissions.allowAnonymousPlayers && (
-            <button
-              type="button"
-              onClick={() => startGame(null, true)}
-              disabled={startingGame}
-              className="mt-3 w-full rounded-xl border-2 border-blue-900 bg-white p-4 text-lg font-bold text-blue-900 disabled:border-gray-400 disabled:text-gray-400"
-            >
-              Play Anonymous
+              Choose a Player Name
             </button>
           )}
 

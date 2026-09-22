@@ -34,7 +34,7 @@ function sanitizePlayer(player: Record<string, unknown> | null) {
   if (!player) return null
 
   return {
-    first_name: player.first_name ? String(player.first_name) : '',
+    display_name: player.display_name ? String(player.display_name) : '',
   }
 }
 
@@ -156,7 +156,7 @@ export async function GET(
     sessionData.player_id
       ? supabaseAdmin
           .from('players')
-          .select('first_name')
+          .select('display_name')
           .eq('player_id', sessionData.player_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),

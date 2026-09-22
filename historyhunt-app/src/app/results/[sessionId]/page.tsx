@@ -23,7 +23,7 @@ type ResultsResponse = {
     completed_at: string | null
   }
   player: {
-    first_name: string
+    display_name: string
   } | null
   game: {
     game_id: string
@@ -253,7 +253,7 @@ export default function ResultsPage({
         </h1>
 
         <p className="mt-2 text-slate-700">
-          Nice work{player?.first_name ? `, ${player.first_name}` : ''}.
+          Nice work{player?.display_name ? `, ${player.display_name}` : ''}.
         </p>
 
         <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">

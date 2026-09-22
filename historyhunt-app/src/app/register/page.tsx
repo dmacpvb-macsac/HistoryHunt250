@@ -4,79 +4,36 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 type RegistrationConfig = {
-  qrSlug: string
-  venueName: string
   campaignTitle: string
   gameTitle: string
-  registrationRequired: boolean
-  allowAnonymousPlayers: boolean
-  eventLeaderboardEnabled: boolean
   eventEnabled: boolean
   eventLogoImageUrl: string
   eventPrimaryColor: string
-}
-
-function normalizePhoneDigits(value: string): string {
-  let digits = value.replace(/\D/g, '')
-
-  if (digits.length === 11 && digits.startsWith('1')) {
-    digits = digits.slice(1)
-  }
-
-  return digits.slice(0, 10)
-}
-
-function formatPhone(value: string): string {
-  const digits = normalizePhoneDigits(value)
-
-  if (digits.length <= 3) return digits
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const qrSlug = searchParams.get('qrSlug') || searchParams.get('play') || ''
-
   const [config, setConfig] = useState<RegistrationConfig | null>(null)
-  const [configLoading, setConfigLoading] = useState(true)
-  const [form, setForm] = useState({
-    first_name: '',
-    display_name: '',
-    phone_number: '',
-    email: '',
-    sms_opt_in: false,
-    leaderboard_opt_in: false,
-    service_affiliation: false,
-  })
+  const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [configLoading, setConfigLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const phoneDigits = normalizePhoneDigits(form.phone_number)
-  const registrationLogo =
-    config?.eventEnabled && config.eventLogoImageUrl
-      ? config.eventLogoImageUrl
-      : '/history-hunt-logo.png'
-  const registrationLogoAlt =
-    config?.eventEnabled && config.campaignTitle
-      ? `${config.campaignTitle} logo`
-      : 'History Hunt'
-
-  const canStart =
-    form.first_name.trim().length > 0 &&
-    phoneDigits.length === 10 &&
-    !loading
+  const trimmedName = displayName.trim().replace(/\s+/g, ' ')
+  const canStart = trimmedName.length >= 6 && trimmedName.length <= 12 && !loading
+  const logo = config?.eventEnabled && config.eventLogoImageUrl
+    ? config.eventLogoImageUrl
+    : '/history-hunt-logo.png'
 
   useEffect(() => {
     let cancelled = false
 
     async function loadConfig() {
       if (!qrSlug) {
-        if (!cancelled) {
-          setConfigLoading(false)
-          setError('Missing game link. Please scan the QR code again.')
-        }
+        setError('Missing game link. Please choose a game again.')
+        setConfigLoading(false)
         return
       }
 
@@ -84,55 +41,33 @@ function RegisterForm() {
         const response = await fetch(`/api/register?qrSlug=${encodeURIComponent(qrSlug)}`, {
           cache: 'no-store',
         })
-
         const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.error || 'Unable to load game.')
+        if (cancelled) return
 
-        if (!response.ok) {
-          throw new Error(payload.error || 'Unable to load registration settings.')
+        setConfig(payload.config || null)
+        if (payload.player?.playerId) {
+          sessionStorage.setItem(`start_after_username:${qrSlug}`, 'true')
+          router.replace(`/play/${encodeURIComponent(qrSlug)}`)
+          return
         }
-
-        if (!cancelled) {
-          setConfig(payload.config || null)
-          setConfigLoading(false)
-        }
+        setConfigLoading(false)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Unable to load registration settings.')
+          setError(err instanceof Error ? err.message : 'Unable to load game.')
           setConfigLoading(false)
         }
       }
     }
 
     loadConfig()
+    return () => { cancelled = true }
+  }, [qrSlug, router])
 
-    return () => {
-      cancelled = true
-    }
-  }, [qrSlug])
-
-  useEffect(() => {
-    const savedFirstName = localStorage.getItem('player_name') || ''
-    const savedDisplayName = localStorage.getItem('player_display_name') || ''
-    if (savedFirstName || savedDisplayName) {
-      // Restore the returning player's established identity after mounting.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm(current => ({
-        ...current,
-        first_name: savedFirstName || current.first_name,
-        display_name: savedDisplayName || current.display_name,
-      }))
-    }
-  }, [])
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, phone_number: formatPhone(e.target.value) })
-  }
-
-  const handleSubmit = async () => {
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
     if (!canStart) {
-      setError(
-        'Please enter your first name and a valid 10-digit mobile number.'
-      )
+      setError('Player name must be 6–12 characters.')
       return
     }
 
@@ -142,218 +77,96 @@ function RegisterForm() {
     try {
       const response = await fetch('/api/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'registered',
           qrSlug,
-          firstName: form.first_name,
-          displayName: form.display_name,
-          phoneNumber: phoneDigits,
-          email: form.email,
-          smsOptIn: form.sms_opt_in,
-          leaderboardOptIn: form.leaderboard_opt_in,
-          serviceAffiliation: form.service_affiliation,
+          displayName: trimmedName,
+          legacyPlayerId: localStorage.getItem('player_id') || '',
         }),
       })
-
       const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Unable to save your player name.')
 
-      if (!response.ok) {
-        throw new Error(payload.error || 'Unable to register player.')
-      }
-
-      if (!payload.player?.playerId) {
-        throw new Error('Registration completed without a valid player record.')
-      }
-
-      localStorage.setItem('player_id', payload.player.playerId)
-      localStorage.setItem('player_name', payload.player.firstName)
-      if (payload.player.displayName) {
-        localStorage.setItem('player_display_name', payload.player.displayName)
-      }
-      localStorage.setItem('qr_slug', qrSlug)
-      sessionStorage.removeItem(`anonymous_player:${qrSlug}`)
-      sessionStorage.setItem(
-        `start_after_registration:${qrSlug}`,
-        payload.player.playerId
-      )
-
+      localStorage.removeItem('player_id')
+      localStorage.removeItem('player_name')
+      localStorage.removeItem('player_display_name')
+      sessionStorage.setItem(`start_after_username:${qrSlug}`, 'true')
       router.replace(`/play/${encodeURIComponent(qrSlug)}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to register player.')
+      setError(err instanceof Error ? err.message : 'Unable to save your player name.')
       setLoading(false)
     }
   }
 
   return (
-    <main className="min-h-screen bg-blue-900 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-xl">
+    <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-xl">
         <div className="text-center mb-6">
           <img
-            src={registrationLogo}
-            alt={registrationLogoAlt}
-            className="w-40 mx-auto mb-4"
+            src={logo}
+            alt={config?.campaignTitle ? `${config.campaignTitle} logo` : 'History Hunt'}
+            className="w-36 sm:w-44 mx-auto mb-4"
           />
-
-          {config?.gameTitle ? (
-            <p className="text-gray-700 font-semibold mt-3">
-              {config.gameTitle}
-            </p>
-          ) : null}
-
-          <p className="text-gray-600 mt-3">
-            Register below to start the hunt.
+          <p className="text-sm font-bold uppercase tracking-wider text-blue-700">
+            No account required
           </p>
+          <h1 className="text-3xl font-extrabold text-blue-950 mt-2">
+            Choose Your Player Name
+          </h1>
+          {config?.gameTitle ? (
+            <p className="text-gray-600 font-semibold mt-3">{config.gameTitle}</p>
+          ) : null}
         </div>
 
-        {configLoading && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm">
-            Loading registration settings...
-          </div>
-        )}
+        {configLoading ? (
+          <div className="bg-blue-50 text-blue-800 rounded-xl p-3 mb-4 text-sm">Loading game…</div>
+        ) : null}
+        {error ? (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm">{error}</div>
+        ) : null}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            First Name <span className="text-red-500">*</span>
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="displayName" className="block text-sm font-bold text-gray-800 mb-2">
+            Player Name
           </label>
-
           <input
-            name="given-name"
-            autoComplete="given-name"
-            className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Your first name"
-            value={form.first_name}
-            onChange={e => setForm({ ...form, first_name: e.target.value })}
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Mobile Number <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            name="tel"
-            autoComplete="tel"
-            className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="(555) 555-5555"
-            type="tel"
-            inputMode="tel"
-            value={form.phone_number}
-            onChange={handlePhoneChange}
-          />
-
-          {phoneDigits.length > 0 && phoneDigits.length < 10 && (
-            <p className="text-xs text-orange-500 mt-1">
-              {10 - phoneDigits.length} more digits needed
-            </p>
-          )}
-
-          {phoneDigits.length === 10 && (
-            <p className="text-xs text-green-600 mt-1">
-              ✓ Looks good
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email <span className="text-gray-400 text-xs">(optional)</span>
-          </label>
-
-          <input
-            name="email"
-            autoComplete="email"
-            className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="your@email.com"
-            type="email"
-            value={form.email}
-            onChange={e => setForm({ ...form, email: e.target.value })}
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Game Play User Name <span className="text-gray-400 text-xs">(optional)</span>
-          </label>
-
-          <input
+            id="displayName"
             name="nickname"
             autoComplete="nickname"
-            className="w-full border border-gray-300 rounded-lg p-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            autoCapitalize="words"
+            maxLength={12}
+            className="w-full border-2 border-gray-300 rounded-xl p-4 text-xl focus:outline-none focus:ring-2 focus:ring-blue-700"
             placeholder="Example: Monty86"
-            value={form.display_name}
-            onChange={e => setForm({ ...form, display_name: e.target.value })}
+            value={displayName}
+            onChange={event => setDisplayName(event.target.value)}
+            disabled={loading || configLoading}
           />
-          <p className="mt-1 text-xs text-gray-500">
-            Your public name for all History Hunt games and leaderboards. Returning players keep the same name.
-          </p>
-        </div>
+          <div className="flex justify-between mt-2 text-xs text-gray-500">
+            <span>6–12 characters; must be unique</span>
+            <span>{trimmedName.length}/12</span>
+          </div>
 
-        <div className="space-y-3 mb-6">
-          {config?.eventLeaderboardEnabled && <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 w-5 h-5 accent-blue-900"
-              checked={form.leaderboard_opt_in}
-              onChange={e =>
-                setForm({ ...form, leaderboard_opt_in: e.target.checked })
-              }
-            />
+          <button
+            type="submit"
+            disabled={!canStart || configLoading}
+            style={{ backgroundColor: config?.eventPrimaryColor || '#172554' }}
+            className="w-full mt-6 disabled:opacity-50 text-white rounded-xl p-4 text-xl font-bold"
+          >
+            {loading ? 'Starting…' : 'Play Now →'}
+          </button>
+        </form>
 
-            <span className="text-sm text-gray-600">
-              Show my leaderboard name and scores on this event&apos;s public leaderboard.
-              <span className="block text-xs text-gray-400">You can play without joining the leaderboard.</span>
-            </span>
-          </label>}
-
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 w-5 h-5 accent-blue-900"
-              checked={form.sms_opt_in}
-              onChange={e =>
-                setForm({ ...form, sms_opt_in: e.target.checked })
-              }
-            />
-
-            <span className="text-sm text-gray-600">
-              I agree to receive educational updates, event information, and
-              History Hunt™ notifications via SMS or email.
-            </span>
-          </label>
-        </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={!canStart || configLoading}
-          className="w-full bg-blue-900 hover:bg-blue-800 disabled:bg-gray-400 text-white rounded-xl p-4 text-xl font-bold transition-colors"
-        >
-          {loading ? 'Starting...' : 'Agree & Play →'}
-        </button>
-
-        <p className="text-center text-xs text-gray-400 mt-4 leading-relaxed">
-          By selecting Agree & Play, you agree to the{' '}
-          <a href="/legal/terms" target="_blank" className="underline">
-            Terms of Use
-          </a>
+        <p className="text-xs text-gray-600 mt-5 leading-relaxed">
+          We do not collect your name, phone number, email address, or other contact information.
+          We do not sell personal data. We use a cookie to remember your player name, progress,
+          scores, and badges on this device. Your player name and scores may appear on public
+          leaderboards. Do not include personal information in your player name.
+        </p>
+        <p className="text-center text-xs text-gray-500 mt-4">
+          By playing, you agree to the{' '}
+          <a href="/legal/terms" target="_blank" className="underline">Terms of Use</a>
           {' '}and acknowledge the{' '}
-          <a href="/legal/privacy" target="_blank" className="underline">
-            Privacy Policy
-          </a>
-          . No purchase necessary. See{' '}
-          <a href="/legal/contest-rules" target="_blank" className="underline">
-            Contest Rules
-          </a>
-          .
+          <a href="/legal/privacy" target="_blank" className="underline">Privacy Policy</a>.
         </p>
       </div>
     </main>
@@ -362,7 +175,7 @@ function RegisterForm() {
 
 export default function Register() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-blue-900 flex items-center justify-center text-white text-xl">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center text-blue-950 text-xl">Loading…</div>}>
       <RegisterForm />
     </Suspense>
   )
