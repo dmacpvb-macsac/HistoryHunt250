@@ -427,16 +427,26 @@ export default function PlayPage({
           )}
 
           {rememberedPlayerName ? (
-            <button
-              type="button"
-              onClick={() => startGame()}
-              disabled={startingGame}
-              className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
-            >
-              {startingGame
-                ? 'Starting...'
-                : `Play as ${rememberedPlayerName}`}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => startGame()}
+                disabled={startingGame}
+                className="mt-4 w-full rounded-xl bg-blue-900 p-4 text-lg font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+              >
+                {startingGame
+                  ? 'Starting...'
+                  : `Play as ${rememberedPlayerName}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/register?qrSlug=${encodeURIComponent(qrSlug)}&change=1`)}
+                disabled={startingGame}
+                className="mt-3 text-sm font-semibold text-blue-800 underline underline-offset-4 disabled:text-gray-400"
+              >
+                Change player name
+              </button>
+            </>
           ) : (
             <button
               type="button"

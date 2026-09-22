@@ -11,11 +11,18 @@ type RegistrationConfig = {
   eventPrimaryColor: string
 }
 
+type CurrentPlayer = {
+  playerId: string
+  displayName: string
+}
+
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const qrSlug = searchParams.get('qrSlug') || searchParams.get('play') || ''
+  const changeUsername = searchParams.get('change') === '1'
   const [config, setConfig] = useState<RegistrationConfig | null>(null)
+  const [currentPlayer, setCurrentPlayer] = useState<CurrentPlayer | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
@@ -23,6 +30,7 @@ function RegisterForm() {
 
   const trimmedName = displayName.trim().replace(/\s+/g, ' ')
   const canStart = trimmedName.length >= 6 && trimmedName.length <= 12 && !loading
+    && (!changeUsername || Boolean(currentPlayer))
   const logo = config?.eventEnabled && config.eventLogoImageUrl
     ? config.eventLogoImageUrl
     : '/history-hunt-logo.png'
@@ -46,10 +54,16 @@ function RegisterForm() {
         if (cancelled) return
 
         setConfig(payload.config || null)
-        if (payload.player?.playerId) {
+        if (payload.player?.playerId && !changeUsername) {
           sessionStorage.setItem(`start_after_username:${qrSlug}`, 'true')
           router.replace(`/play/${encodeURIComponent(qrSlug)}`)
           return
+        }
+        if (payload.player?.playerId && changeUsername) {
+          setCurrentPlayer(payload.player)
+          setDisplayName(String(payload.player.displayName || ''))
+        } else if (changeUsername) {
+          setError('We could not recognize this player on this device. Return to the game and choose a player name.')
         }
         setConfigLoading(false)
       } catch (err) {
@@ -62,7 +76,7 @@ function RegisterForm() {
 
     loadConfig()
     return () => { cancelled = true }
-  }, [qrSlug, router])
+  }, [changeUsername, qrSlug, router])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -76,20 +90,22 @@ function RegisterForm() {
 
     try {
       const response = await fetch('/api/register', {
-        method: 'POST',
+        method: changeUsername ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           qrSlug,
           displayName: trimmedName,
-          legacyPlayerId: localStorage.getItem('player_id') || '',
+          legacyPlayerId: changeUsername ? '' : localStorage.getItem('player_id') || '',
         }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Unable to save your player name.')
 
-      localStorage.removeItem('player_id')
-      localStorage.removeItem('player_name')
-      localStorage.removeItem('player_display_name')
+      if (!changeUsername) {
+        localStorage.removeItem('player_id')
+        localStorage.removeItem('player_name')
+        localStorage.removeItem('player_display_name')
+      }
       sessionStorage.setItem(`start_after_username:${qrSlug}`, 'true')
       router.replace(`/play/${encodeURIComponent(qrSlug)}`)
     } catch (err) {
@@ -111,7 +127,7 @@ function RegisterForm() {
             No account required
           </p>
           <h1 className="text-3xl font-extrabold text-blue-950 mt-2">
-            Choose Your Player Name
+            {changeUsername ? 'Change Your Player Name' : 'Choose Your Player Name'}
           </h1>
           {config?.gameTitle ? (
             <p className="text-gray-600 font-semibold mt-3">{config.gameTitle}</p>
@@ -152,7 +168,9 @@ function RegisterForm() {
             style={{ backgroundColor: config?.eventPrimaryColor || '#172554' }}
             className="w-full mt-6 disabled:opacity-50 text-white rounded-xl p-4 text-xl font-bold"
           >
-            {loading ? 'Starting…' : 'Play Now →'}
+            {loading
+              ? (changeUsername ? 'Updating…' : 'Starting…')
+              : (changeUsername ? 'Save and Play →' : 'Play Now →')}
           </button>
         </form>
 
