@@ -34,7 +34,7 @@ type BadgeType = 'completed' | 'perfect_score'
 // State/Territory editions share one completion badge per jurisdiction.
 // Current State/Territory editions are web games with Statewide / Online
 // routing metadata. Legacy community games remain supported.
-const SHARED_BADGE_FOLDER = 'states'
+const SHARED_BADGE_FOLDER = 'games/states'
 
 function isSharedStateBadgeGame(
   gameType: string,
