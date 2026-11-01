@@ -686,7 +686,7 @@ BEGIN
     total_points,
     warnings_count;
 END;
-$function$
+$function$;
 
 REVOKE EXECUTE
 ON FUNCTION public.import_engineering_workbook(jsonb)
