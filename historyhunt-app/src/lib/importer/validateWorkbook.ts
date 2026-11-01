@@ -146,6 +146,17 @@ function parseQuestion(row: Record<string, unknown>): QuestionImportRow {
   }
 }
 
+function isSharedStateBadgeGame(huntInfo: HuntInfo): boolean {
+  return (
+    huntInfo.gameType === 'community' ||
+    (
+      huntInfo.gameType === 'web' &&
+      huntInfo.city.trim().toLowerCase() === 'statewide' &&
+      /^online\b/i.test(huntInfo.venueName.trim())
+    )
+  )
+}
+
 function isBlankQuestionRow(row: Record<string, unknown>): boolean {
   return (
     !value(row, 'Sequence Number', 'Sort Order') &&
@@ -323,14 +334,14 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
     }
 
 
-    if (huntInfo.gameType === 'community') {
+    if (isSharedStateBadgeGame(huntInfo)) {
       if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
         addIssue(
           errors,
           'error',
           'Hunt Info',
-          'COMMUNITY_COMPLETION_BADGE_REQUIRED',
-          'Community games require a shared state or territory Completion Badge Slug.',
+          'STATE_COMPLETION_BADGE_REQUIRED',
+          'State/Territory games require a shared Completion Badge Slug.',
           2,
           'Completion Badge Slug'
         )
@@ -341,8 +352,8 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
           errors,
           'error',
           'Hunt Info',
-          'COMMUNITY_PERFECT_BADGE_NOT_ALLOWED',
-          'Community games use only the shared completion badge. Perfect Score Badge Slug must be blank.',
+          'STATE_PERFECT_BADGE_NOT_ALLOWED',
+          'State/Territory games use only the shared completion badge. Perfect Score Badge Slug must be blank.',
           2,
           'Perfect Score Badge Slug'
         )
