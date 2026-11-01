@@ -31,12 +31,25 @@ function normalizeRpcResult(data: unknown, fallbackPayload: ReturnType<typeof bu
 
 type BadgeType = 'completed' | 'perfect_score'
 
-// "community" games (states/territories) share one badge per state, stored
-// in a single shared Storage folder rather than a per-game folder. Every
-// other game type (venue, web, music, kidz) keeps a per-game badge and
-// verifies its canonical Storage object exists.
-const SHARED_BADGE_GAME_TYPES = new Set(['community'])
-const SHARED_BADGE_FOLDER = 'games/states'
+// State/Territory editions share one completion badge per jurisdiction.
+// Current State/Territory editions are web games with Statewide / Online
+// routing metadata. Legacy community games remain supported.
+const SHARED_BADGE_FOLDER = 'states'
+
+function isSharedStateBadgeGame(
+  gameType: string,
+  city: string,
+  venueName: string
+) {
+  return (
+    gameType === 'community' ||
+    (
+      gameType === 'web' &&
+      city.trim().toLowerCase() === 'statewide' &&
+      /^online\b/i.test(venueName.trim())
+    )
+  )
+}
 
 const DEFAULT_BADGE_SLUGS: Record<BadgeType, string> = {
   completed: 'default-completed',
@@ -47,20 +60,20 @@ const DEFAULT_BADGE_SLUGS: Record<BadgeType, string> = {
  * Ensures a badge is registered in the `badges` table, then returns the
  * slug that should actually be written onto the game record.
  *
- * - "community" (state/territory) games: the badge lives in the shared
- *   games/states/ folder, not a per-game folder. We trust the workbook's
- *   badge slug as-is once it's confirmed present there. A missing shared
- *   state badge is a hard failure — every game for that state depends on
- *   the one shared asset, so silently falling back would be misleading.
- * - venue / web / music / kidz games: the badge lives in its own
- *   games/{gameSlug}/ folder. If the canonical Storage object isn't found,
- *   we fall back to the default badge for that badge type instead of
- *   failing the whole import.
+ * - State/Territory editions: the completion badge lives in the shared
+ *   states/ folder rather than a per-game folder. Current State/Territory
+ *   editions are web games using Statewide / Online routing metadata;
+ *   legacy community games remain supported.
+ * - Other venue / web / music / kidz games keep game-specific badges under
+ *   games/{gameSlug}/. If the canonical Storage object isn't found, the
+ *   importer falls back to the default badge for that badge type.
  */
 async function ensureBadgeRegistered(
   gameSlug: string,
   gameTitle: string,
   gameType: string,
+  city: string,
+  venueName: string,
   badgeSlug: string,
   badgeType: BadgeType
 ): Promise<string> {
@@ -68,7 +81,11 @@ async function ensureBadgeRegistered(
     return badgeSlug
   }
 
-  const isSharedStateBadge = SHARED_BADGE_GAME_TYPES.has(gameType)
+  const isSharedStateBadge = isSharedStateBadgeGame(
+    gameType,
+    city,
+    venueName
+  )
 
   const { data: existingBadge, error: existingBadgeError } = await supabaseAdmin
     .from('badges')
@@ -241,13 +258,19 @@ export async function POST(request: NextRequest) {
     const gameSlug = String(payload.huntInfo.game_slug || '')
     const gameTitle = String(payload.huntInfo.title || 'History Hunt')
     const gameType = String(payload.huntInfo.game_type || '')
+    const city = String(payload.huntInfo.city || '')
+    const venueName = String(payload.huntInfo.venue_name || '')
     const completionBadgeSlug = String(payload.huntInfo.completion_badge_slug || '')
     const perfectBadgeSlug = String(payload.huntInfo.perfect_score_badge_slug || '')
-    const isSharedStateBadge = SHARED_BADGE_GAME_TYPES.has(gameType)
+    const isSharedStateBadge = isSharedStateBadgeGame(
+      gameType,
+      city,
+      venueName
+    )
 
     if (isSharedStateBadge && !completionBadgeSlug) {
       throw new Error(
-        'Community games require a shared state or territory Completion Badge Slug.'
+        'State/Territory games require a shared Completion Badge Slug.'
       )
     }
 
@@ -267,6 +290,8 @@ export async function POST(request: NextRequest) {
         gameSlug,
         gameTitle,
         gameType,
+        city,
+        venueName,
         completionBadgeSlug,
         'completed'
       )
@@ -279,6 +304,8 @@ export async function POST(request: NextRequest) {
         gameSlug,
         gameTitle,
         gameType,
+        city,
+        venueName,
         perfectBadgeSlug,
         'perfect_score'
       )
