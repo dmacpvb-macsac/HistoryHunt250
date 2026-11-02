@@ -29,7 +29,7 @@ function normalizeRpcResult(data: unknown, fallbackPayload: ReturnType<typeof bu
   }
 }
 
-type BadgeType = 'completed' | 'perfect_score'
+type BadgeType = 'completed'
 
 // State/Territory editions share one completion badge per jurisdiction.
 // Current State/Territory editions are web games with Statewide / Online
@@ -53,7 +53,6 @@ function isSharedStateBadgeGame(
 
 const DEFAULT_BADGE_SLUGS: Record<BadgeType, string> = {
   completed: 'default-completed',
-  perfect_score: 'default-perfect',
 }
 
 /**
@@ -161,22 +160,11 @@ async function ensureBadgeRegistered(
     throw new Error(`Unable to create public URL for badge "${badgeSlug}".`)
   }
 
-  const badgeLabel =
-    badgeType === 'completed'
-      ? 'Completion Badge'
-      : 'Perfect Score Badge'
-
-  const altText =
-    badgeType === 'completed'
-      ? `${gameTitle} completion badge`
-      : `${gameTitle} perfect score badge`
-
-  const description =
-    badgeType === 'completed'
-      ? isSharedStateBadge
-        ? `Awarded for completing any ${gameTitle} History Hunt game.`
-        : `Awarded for completing the ${gameTitle}.`
-      : `Awarded for earning a perfect score on the ${gameTitle}.`
+  const badgeLabel = 'Completion Badge'
+  const altText = `${gameTitle} completion badge`
+  const description = isSharedStateBadge
+    ? `Awarded for completing any ${gameTitle} History Hunt game.`
+    : `Awarded for completing the ${gameTitle}.`
 
   const { error: insertError } = await supabaseAdmin
     .from('badges')
@@ -261,7 +249,6 @@ export async function POST(request: NextRequest) {
     const city = String(payload.huntInfo.city || '')
     const venueName = String(payload.huntInfo.venue_name || '')
     const completionBadgeSlug = String(payload.huntInfo.completion_badge_slug || '')
-    const perfectBadgeSlug = String(payload.huntInfo.perfect_score_badge_slug || '')
     const isSharedStateBadge = isSharedStateBadgeGame(
       gameType,
       city,
@@ -274,17 +261,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Explicit game-specific badge slugs may be auto-registered from their
-    // canonical Storage objects. Blank badge fields continue to use the
-    // default badges inside import_engineering_workbook. "community"
-    // (state/territory) games use a shared per-state badge and skip
-    // per-game Storage verification once registered; venue/web/music/kidz
-    // games fall back to the default badge set if their badge is missing,
-    // rather than failing the import. ensureBadgeRegistered() returns the
-    // slug that should actually be written to the game record, which may
-    // differ from the input slug if a fallback badge was used. Community
-    // games always clear the perfect-score slug; the database policy trigger
-    // also enforces a NULL perfect_score_badge_id as a final safeguard.
+    // Completion badges may be auto-registered from canonical Storage objects.
+    // State/Territory games use one shared completion badge per jurisdiction;
+    // other game types may fall back to default-completed when no custom
+    // completion badge is supplied. Perfect Score badges are retired globally
+    // and are always cleared before the database RPC is called.
     if (completionBadgeSlug) {
       payload.huntInfo.completion_badge_slug = await ensureBadgeRegistered(
         gameSlug,
@@ -297,19 +278,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (isSharedStateBadge) {
-      payload.huntInfo.perfect_score_badge_slug = null
-    } else if (perfectBadgeSlug) {
-      payload.huntInfo.perfect_score_badge_slug = await ensureBadgeRegistered(
-        gameSlug,
-        gameTitle,
-        gameType,
-        city,
-        venueName,
-        perfectBadgeSlug,
-        'perfect_score'
-      )
-    }
+    payload.huntInfo.perfect_score_badge_slug = null
 
     const { data, error } = await supabaseAdmin.rpc('import_engineering_workbook', {
       payload,
