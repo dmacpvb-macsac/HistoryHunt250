@@ -356,7 +356,7 @@ export default function PlayPage({
       <main className="min-h-screen bg-slate-100 p-6 text-center">
         <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-xl">
           <h1 className="text-2xl font-bold text-blue-900">
-            {hunt?.campaign?.title || hunt?.game?.title || 'History Hunt™'}
+            {hunt?.game?.title || hunt?.campaign?.title || 'History Hunt™'}
           </h1>
 
           <p className="mt-4 text-lg text-gray-700">{blockedMessage}</p>
