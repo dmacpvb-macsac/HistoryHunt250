@@ -12,6 +12,7 @@ type GameRow = {
   slug: string | null
   title: string | null
   game_type: string | null
+  city: string | null
   public_play_url: string | null
   status: string | null
   active: boolean | null
@@ -100,7 +101,7 @@ export async function GET(request: Request) {
     supabaseAdmin
       .from('games')
       .select(
-        'game_id, campaign_id, slug, title, game_type, public_play_url, status, active, starts_at, ends_at'
+        'game_id, campaign_id, slug, title, game_type, city, public_play_url, status, active, starts_at, ends_at'
       )
       .order('created_at', { ascending: false }),
 
@@ -157,6 +158,14 @@ export async function GET(request: Request) {
   const currentGames = games.flatMap(game => {
     const gameSlug = game.slug?.trim() || ''
     const gameType = game.game_type?.trim().toLowerCase() || ''
+    const city = game.city?.trim() || ''
+    const isStateTerritoryGame =
+      gameType === 'community' ||
+      (
+        gameType === 'web' &&
+        city.toLowerCase() === 'statewide'
+      )
+    const catalogType = isStateTerritoryGame ? 'community' : gameType
 
     if (!gameSlug) return []
 
@@ -191,6 +200,8 @@ export async function GET(request: Request) {
       title: game.title || '',
       gameSlug,
       gameType,
+      catalogType,
+      city,
       qrSlug: gameSlug,
       venueName: gameType === 'venue' ? venue?.name || '' : '',
       publicPlayUrl:
