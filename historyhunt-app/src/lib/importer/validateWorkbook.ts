@@ -346,26 +346,20 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
           'Completion Badge Slug'
         )
       }
+    } else if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
+      addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_COMPLETION_BADGE', 'Completion Badge Slug is blank; importer will use default-completed.', 2, 'Completion Badge Slug')
+    }
 
-      if (huntInfo.perfectScoreBadgeSlug) {
-        addIssue(
-          errors,
-          'error',
-          'Hunt Info',
-          'STATE_PERFECT_BADGE_NOT_ALLOWED',
-          'State/Territory games use only the shared completion badge. Perfect Score Badge Slug must be blank.',
-          2,
-          'Perfect Score Badge Slug'
-        )
-      }
-    } else {
-      if (huntInfo.badgeEnabled && !huntInfo.completionBadgeSlug) {
-        addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_COMPLETION_BADGE', 'Completion Badge Slug is blank; importer will use default-completed.', 2, 'Completion Badge Slug')
-      }
-
-      if (huntInfo.badgeEnabled && !huntInfo.perfectScoreBadgeSlug) {
-        addIssue(warnings, 'warning', 'Hunt Info', 'DEFAULT_PERFECT_BADGE', 'Perfect Score Badge Slug is blank; importer will use default-perfect.', 2, 'Perfect Score Badge Slug')
-      }
+    if (huntInfo.perfectScoreBadgeSlug) {
+      addIssue(
+        errors,
+        'error',
+        'Hunt Info',
+        'PERFECT_BADGE_RETIRED',
+        'Perfect Score badges are retired. Perfect Score Badge Slug must be blank.',
+        2,
+        'Perfect Score Badge Slug'
+      )
     }
   }
 
