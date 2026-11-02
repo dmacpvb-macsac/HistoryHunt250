@@ -232,9 +232,9 @@ export function validateWorkbook(sheets: WorkbookSheets): ValidatedWorkbook {
       addIssue(errors, 'error', 'Hunt Info', 'INVALID_PERFECT_BADGE_SLUG', 'Perfect Score Badge Slug must contain lowercase letters, numbers, and hyphens only.', 2, 'Perfect Score Badge Slug')
     }
 
-    const validStatuses: GameStatus[] = ['draft', 'scheduled']
+    const validStatuses: GameStatus[] = ['draft', 'scheduled', 'active']
     if (!validStatuses.includes(huntInfo.gameStatus)) {
-      addIssue(errors, 'error', 'Hunt Info', 'INVALID_GAME_STATUS', 'Game Status must be Draft or Scheduled for importer use.', 2, 'Game Status')
+      addIssue(errors, 'error', 'Hunt Info', 'INVALID_GAME_STATUS', 'Game Status must be Draft, Scheduled, or Active for importer use.', 2, 'Game Status')
     }
 
     const validTypes: GameType[] = ['venue', 'community', 'web', 'music', 'kidz']
