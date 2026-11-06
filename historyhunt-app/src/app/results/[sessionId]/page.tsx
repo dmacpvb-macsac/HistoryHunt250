@@ -149,6 +149,30 @@ export default function ResultsPage({
   const venue = results?.venue || null
   const campaign = results?.campaign || null
   const isEventGame = campaign?.event_enabled === true
+  const isVeteransGame = /veteran|wounded|warrior|wwp|military|navy|marine|carry[\s-]?forward/i.test(
+    [game?.title, game?.slug, campaign?.title, campaign?.slug]
+      .filter(Boolean)
+      .join(' ')
+  )
+
+  // Results CTA fields come from game configuration. Only show public links
+  // and never render internal, test, or placeholder labels.
+  const publicCtaUrl = (() => {
+    const value = game?.results_cta_url?.trim()
+    if (!value) return ''
+    try {
+      const parsed = new URL(value)
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : ''
+    } catch {
+      return ''
+    }
+  })()
+  const showResultsCta = Boolean(
+    game?.results_cta_enabled &&
+    game.results_cta_label?.trim() &&
+    !/^(demo|test|placeholder|internal)\b/i.test(game.results_cta_label.trim()) &&
+    publicCtaUrl
+  )
 
   const isPerfect = session && Number(session.score) >= Number(session.total_points)
 
@@ -197,7 +221,7 @@ export default function ResultsPage({
     'I earned my History Hunt™ badge. Can you beat my score?'
 
   const listenUrl = 'https://interceptmusic.lnk.to/fwCUA4'
-  const songInfoUrl = 'https://america250proof.com'
+  const veteransWeekSpotifyUrl = 'https://open.spotify.com/playlist/25oVRMdBoJYCEWvrf7QGns'
 
   async function nativeShare() {
     if (
@@ -286,10 +310,7 @@ export default function ResultsPage({
 
         {game.badge_share_enabled !== false && nativeShareSupported && (
           <section className="mt-8 border-t border-slate-200 pt-6 text-center">
-            <h2 className="text-xl font-black text-blue-900">Share Your Badge</h2>
-            <p className="mt-2 text-slate-700">
-              Open your phone&apos;s share sheet to post, text, or send this hunt.
-            </p>
+            <h2 className="text-xl font-black text-blue-900">Share Your Hunt</h2>
 
             <button
               type="button"
@@ -310,52 +331,44 @@ export default function ResultsPage({
           />
         )}
 
-        {game.results_cta_enabled && game.results_cta_label && game.results_cta_url && (
+        {showResultsCta && (
           <section className="mt-8 border-t border-slate-200 pt-6">
             <h2 className="text-xl font-black text-blue-900">
-              {game.results_cta_type === 'donate' ? 'Support the Mission' : 'Next Step'}
+              {game.results_cta_type === 'donate' ? 'Support the Mission' : 'Learn More'}
             </h2>
 
-            {game.results_cta_note && (
-              <p className="mt-2 text-slate-700">
-                {game.results_cta_note}
-              </p>
-            )}
-
             <a
-              href={game.results_cta_url}
+              href={publicCtaUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 inline-block rounded-xl bg-green-700 px-6 py-4 text-lg font-bold text-white"
+              className="mt-4 inline-flex min-h-12 items-center justify-center rounded-xl bg-green-700 px-6 py-3 text-base font-bold text-white hover:bg-green-800"
             >
               {game.results_cta_label} →
             </a>
           </section>
         )}
 
-        {!isEventGame && <section className="mt-8 border-t border-slate-200 pt-6">
-          <h2 className="text-xl font-black text-blue-900">Keep Exploring</h2>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <a
-              href={listenUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-xl bg-red-600 p-4 text-lg font-bold text-white"
-            >
-              Listen to the Song →
-            </a>
-
-            <a
-              href={songInfoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-xl bg-blue-900 p-4 text-lg font-bold text-white"
-            >
-              More About the Song →
-            </a>
-          </div>
-        </section>}
+        {!isEventGame && (
+          <section className="mt-8 border-t border-slate-200 pt-6">
+            <h2 className="text-xl font-black text-blue-900">Keep Exploring</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <a
+                href={isVeteransGame ? '/veterans-week-jax' : 'https://historyhuntgames.com/games.html'}
+                className="flex min-h-12 items-center justify-center rounded-xl bg-blue-900 px-5 py-3 font-bold text-white hover:bg-blue-800"
+              >
+                {isVeteransGame ? 'More Veterans Hunts →' : 'Explore More Hunts →'}
+              </a>
+              <a
+                href={isVeteransGame ? veteransWeekSpotifyUrl : listenUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-12 items-center justify-center rounded-xl border-2 border-blue-900 px-5 py-3 font-bold text-blue-900 hover:bg-blue-50"
+              >
+                {isVeteransGame ? 'Veterans Week Playlist ↗' : 'Listen to America 250 Proof ↗'}
+              </a>
+            </div>
+          </section>
+        )}
 
         {isEventGame && campaign?.slug && (
           <Link
