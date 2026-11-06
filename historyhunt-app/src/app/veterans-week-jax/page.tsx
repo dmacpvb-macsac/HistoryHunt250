@@ -221,22 +221,54 @@ export default function VeteransWeekJaxPage() {
       <section className="mx-auto max-w-6xl px-5 py-14 text-center">
         <h2 className="text-3xl font-black text-blue-950">The Jacksonville Veterans Week Soundtrack</h2>
         <p className="mx-auto mt-3 max-w-2xl text-slate-600">
-          Featuring America 250 Proof™ and an expanding playlist of patriotic songs and Jacksonville musicians.
-          The Spotify player will appear here when the public playlist link is supplied.
+          Our Veterans Week soundtrack brings together America 250 Proof™ and an expanding collection
+          of patriotic songs and Jacksonville artists. Listen here or open the playlist in Spotify.
         </p>
-        <a
-          className="mt-6 inline-block rounded-xl bg-blue-950 px-6 py-4 font-bold text-white hover:bg-blue-800"
-          href="https://america250proof.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Explore America 250 Proof™ →
-        </a>
+        <div className="mx-auto mt-7 w-full max-w-3xl overflow-hidden rounded-2xl bg-white p-3 shadow-lg">
+          <iframe
+            title="America 250 Proof Veterans Week Spotify playlist"
+            src="https://open.spotify.com/embed/playlist/25oVRMdBoJYCEWvrf7QGns"
+            width="100%"
+            height="352"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            className="rounded-xl"
+          />
+        </div>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <a
+            className="inline-block rounded-xl bg-green-700 px-6 py-4 font-bold text-white hover:bg-green-600"
+            href="https://open.spotify.com/playlist/25oVRMdBoJYCEWvrf7QGns"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Listen on Spotify ↗
+          </a>
+          <a
+            className="inline-block rounded-xl bg-blue-950 px-6 py-4 font-bold text-white hover:bg-blue-800"
+            href="https://america250proof.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Explore America 250 Proof™ →
+          </a>
+        </div>
       </section>
 
       <footer className="bg-slate-950 px-5 py-8 text-center text-sm text-slate-300">
         <p>America 250 Proof™ · Mac &amp; Sac Enterprises LLC · In collaboration with BUZZ Media</p>
-        <p className="mt-2">Our Veterans Deserve More Than One Day.</p>
+        <nav className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2" aria-label="Related Veterans Week websites">
+          <a className="underline hover:text-white" href="https://macandsac.com/initiatives/veterans-week-2026/" target="_blank" rel="noopener noreferrer">
+            Mac &amp; Sac Veterans Week
+          </a>
+          <a className="underline hover:text-white" href="https://america250proof.com/" target="_blank" rel="noopener noreferrer">
+            America 250 Proof™
+          </a>
+          <a className="underline hover:text-white" href="https://open.spotify.com/playlist/25oVRMdBoJYCEWvrf7QGns" target="_blank" rel="noopener noreferrer">
+            Spotify Soundtrack
+          </a>
+        </nav>
+        <p className="mt-3">Our Veterans Deserve More Than One Day.</p>
       </footer>
     </main>
   )
