@@ -3,6 +3,14 @@ import Link from "next/link";
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-100 p-6 text-center">
+      <div className="mx-auto mb-6 max-w-3xl rounded-2xl bg-gradient-to-r from-blue-950 to-red-900 px-6 py-6 text-white shadow-xl">
+        <p className="text-xs font-bold uppercase tracking-widest text-amber-300">November 6–12, 2026 · Jacksonville</p>
+        <h2 className="mt-2 text-2xl font-black sm:text-3xl">Our Veterans Deserve More Than One Day.</h2>
+        <p className="mt-3 text-slate-100">Explore our Veterans Week History Hunts and discover ways to support those who serve.</p>
+        <Link href="/veterans-week-jax" className="mt-4 inline-block rounded-xl bg-white px-5 py-3 font-bold text-blue-950 hover:bg-amber-100">
+          Explore Veterans Week →
+        </Link>
+      </div>
       <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-6">
         <img
           src="/history-hunt-logo.png"
