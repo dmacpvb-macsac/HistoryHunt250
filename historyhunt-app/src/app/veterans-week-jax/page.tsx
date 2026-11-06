@@ -257,7 +257,18 @@ export default function VeteransWeekJaxPage() {
 
       <footer className="bg-slate-950 px-5 py-8 text-center text-sm text-slate-300">
         <p>America 250 Proof™ · Mac &amp; Sac Enterprises LLC · In collaboration with BUZZ Media</p>
-        <p className="mt-2">Our Veterans Deserve More Than One Day.</p>
+        <nav className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2" aria-label="Related Veterans Week websites">
+          <a className="underline hover:text-white" href="https://macandsac.com/initiatives/veterans-week-2026/" target="_blank" rel="noopener noreferrer">
+            Mac &amp; Sac Veterans Week
+          </a>
+          <a className="underline hover:text-white" href="https://america250proof.com/" target="_blank" rel="noopener noreferrer">
+            America 250 Proof™
+          </a>
+          <a className="underline hover:text-white" href="https://open.spotify.com/playlist/25oVRMdBoJYCEWvrf7QGns" target="_blank" rel="noopener noreferrer">
+            Spotify Soundtrack
+          </a>
+        </nav>
+        <p className="mt-3">Our Veterans Deserve More Than One Day.</p>
       </footer>
     </main>
   )
