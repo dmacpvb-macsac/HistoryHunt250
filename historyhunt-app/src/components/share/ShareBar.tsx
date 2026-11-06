@@ -45,7 +45,7 @@ export default function ShareBar({
   return (
     <section className="mt-8 border-t border-slate-200 pt-6 text-center">
       <h2 className="text-xl font-black text-blue-900">Challenge Others</h2>
-      <p className="mt-2 text-slate-700">Share your badge and invite others to play.</p>
+      <p className="mt-2 text-slate-700">Invite someone to try the hunt.</p>
 
       <div className="mx-auto mt-5 grid max-w-md grid-cols-4 gap-2">
         {showCopy && (
